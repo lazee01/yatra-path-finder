@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { TripResults } from './TripResults';
 
 const budgetTypes = [
   { id: 'low', label: 'Budget', range: '₹5,000 - ₹15,000', color: 'bg-green-100 text-green-800' },
@@ -23,6 +24,7 @@ const transportOptions = [
 
 export function TripPlanner() {
   const [currentStep, setCurrentStep] = useState(1);
+  const [showResults, setShowResults] = useState(false);
   const [formData, setFormData] = useState({
     homeLocation: '',
     destination: '',
@@ -40,6 +42,9 @@ export function TripPlanner() {
   const handleNext = () => {
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
+    } else {
+      // Generate plan and show results
+      setShowResults(true);
     }
   };
 
@@ -49,9 +54,19 @@ export function TripPlanner() {
     }
   };
 
+  const handleBackToPlanner = () => {
+    setShowResults(false);
+    setCurrentStep(1);
+  };
+
   const updateFormData = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
+
+  // Show results page
+  if (showResults) {
+    return <TripResults formData={formData} onBack={handleBackToPlanner} />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-peaceful p-6">
