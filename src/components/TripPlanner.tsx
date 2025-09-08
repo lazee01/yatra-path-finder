@@ -103,21 +103,16 @@ export function TripPlanner() {
                   
                   <div className="space-y-2">
                     <Label htmlFor="destination">Spiritual Destination</Label>
-                    <Select value={formData.destination} onValueChange={(value) => updateFormData('destination', value)}>
-                      <SelectTrigger className="h-12">
-                        <SelectValue placeholder="Choose sacred destination" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="varanasi">Varanasi, Uttar Pradesh</SelectItem>
-                        <SelectItem value="tirupati">Tirupati, Andhra Pradesh</SelectItem>
-                        <SelectItem value="rishikesh">Rishikesh, Uttarakhand</SelectItem>
-                        <SelectItem value="haridwar">Haridwar, Uttarakhand</SelectItem>
-                        <SelectItem value="mathura">Mathura, Uttar Pradesh</SelectItem>
-                        <SelectItem value="kedarnath">Kedarnath, Uttarakhand</SelectItem>
-                        <SelectItem value="badrinath">Badrinath, Uttarakhand</SelectItem>
-                        <SelectItem value="amritsar">Amritsar, Punjab</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      id="destination"
+                      placeholder="e.g., Varanasi, Tirupati, Rishikesh, Kedarnath..."
+                      value={formData.destination}
+                      onChange={(e) => updateFormData('destination', e.target.value)}
+                      className="h-12"
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      Popular destinations: Varanasi, Tirupati, Rishikesh, Haridwar, Mathura, Kedarnath, Badrinath, Amritsar
+                    </div>
                   </div>
                 </div>
               </div>
