@@ -2,41 +2,60 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Spiritual Travel Planner Design System - Hindu Pilgrimage Theme */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Spiritual Color Palette */
+    --background: 35 100% 98%;
+    --foreground: 20 30% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 20 30% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 20 30% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Saffron/Orange Primary - Sacred Color */
+    --primary: 35 95% 55%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 35 85% 65%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Light Blue Secondary - Trust & Peace */
+    --secondary: 210 60% 85%;
+    --secondary-foreground: 20 30% 15%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted Warm Tones */
+    --muted: 35 25% 95%;
+    --muted-foreground: 20 20% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent Orange */
+    --accent: 25 90% 60%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 35 15% 88%;
+    --input: 35 15% 92%;
+    --ring: 35 95% 55%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
+
+    /* Spiritual Gradients */
+    --gradient-sacred: linear-gradient(135deg, hsl(35 95% 55%), hsl(25 90% 60%));
+    --gradient-peaceful: linear-gradient(180deg, hsl(210 60% 95%), hsl(35 25% 98%));
+    --gradient-hero: linear-gradient(135deg, hsl(35 95% 55%) 0%, hsl(25 90% 60%) 50%, hsl(210 60% 70%) 100%);
+    --gradient-temple: linear-gradient(45deg, hsl(35 80% 85%) 0%, hsl(210 40% 90%) 100%);
+
+    /* Spiritual Shadows */
+    --shadow-sacred: 0 10px 40px -10px hsl(35 95% 55% / 0.3);
+    --shadow-peaceful: 0 4px 20px -4px hsl(210 60% 70% / 0.2);
+    --shadow-temple: 0 8px 32px -8px hsl(35 80% 60% / 0.25);
+
+    /* Sacred Animations */
+    --transition-sacred: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-peaceful: all 0.3s ease-out;
 
     --sidebar-background: 0 0% 98%;
 
@@ -56,41 +75,39 @@ All colors MUST be HSL.
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    /* Dark mode for spiritual theme */
+    --background: 20 15% 8%;
+    --foreground: 35 25% 95%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 20 15% 10%;
+    --card-foreground: 35 25% 95%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 20 15% 10%;
+    --popover-foreground: 35 25% 95%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 35 95% 55%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 20 20% 15%;
+    --secondary-foreground: 35 25% 95%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 20 20% 12%;
+    --muted-foreground: 35 15% 65%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 25 90% 60%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 45%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --border: 20 15% 18%;
+    --input: 20 15% 15%;
+    --ring: 35 95% 55%;
+
+    /* Dark mode gradients */
+    --gradient-sacred: linear-gradient(135deg, hsl(35 95% 45%), hsl(25 90% 50%));
+    --gradient-peaceful: linear-gradient(180deg, hsl(20 20% 12%), hsl(20 15% 8%));
+    --gradient-hero: linear-gradient(135deg, hsl(35 95% 45%) 0%, hsl(25 90% 50%) 50%, hsl(210 60% 40%) 100%);
   }
 }
 
@@ -100,6 +117,65 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
+  }
+
+  /* Custom scrollbar for spiritual theme */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary/30 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary/50;
+  }
+}
+
+@layer components {
+  /* Sacred Button Styles */
+  .btn-sacred {
+    background: var(--gradient-sacred);
+    @apply text-primary-foreground font-semibold rounded-xl px-6 py-3 shadow-lg;
+    box-shadow: var(--shadow-sacred);
+    transition: var(--transition-sacred);
+  }
+  
+  .btn-sacred:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sacred), 0 4px 12px -4px hsl(35 95% 55% / 0.4);
+  }
+
+  /* Peaceful Container */
+  .container-peaceful {
+    background: var(--gradient-peaceful);
+    @apply rounded-2xl p-6 border shadow-sm;
+    box-shadow: var(--shadow-peaceful);
+  }
+
+  /* Temple Card */
+  .card-temple {
+    background: var(--gradient-temple);
+    @apply rounded-xl p-4 border shadow-md transition-all duration-300;
+    box-shadow: var(--shadow-temple);
+  }
+  
+  .card-temple:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-temple), 0 8px 25px -8px hsl(35 80% 60% / 0.35);
+  }
+
+  /* Hero Text Gradient */
+  .text-sacred-gradient {
+    background: var(--gradient-sacred);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 }

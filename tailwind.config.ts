@@ -22,6 +22,7 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          glow: "hsl(var(--primary-glow))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -57,6 +58,20 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+      },
+      backgroundImage: {
+        'gradient-sacred': 'var(--gradient-sacred)',
+        'gradient-peaceful': 'var(--gradient-peaceful)',
+        'gradient-hero': 'var(--gradient-hero)',
+        'gradient-temple': 'var(--gradient-temple)',
+      },
+      boxShadow: {
+        'sacred': 'var(--shadow-sacred)',
+        'peaceful': 'var(--shadow-peaceful)',
+        'temple': 'var(--shadow-temple)',
+      },
+      transitionTimingFunction: {
+        'sacred': 'cubic-bezier(0.4, 0, 0.2, 1)',
       },
       borderRadius: {
         lg: "var(--radius)",
