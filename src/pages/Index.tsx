@@ -3,6 +3,7 @@ import { Navigation } from '@/components/Navigation';
 import { Onboarding } from '@/components/Onboarding';
 import { HeroSection } from '@/components/HeroSection';
 import { TripPlanner } from '@/components/TripPlanner';
+import { StateDestinations } from '@/components/StateDestinations';
 
 const Index = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -36,7 +37,10 @@ const Index = () => {
       
       <main className="pb-20 lg:pb-0">
         {activeTab === 'home' && (
-          <HeroSection onStartPlanning={handleStartPlanning} />
+          <>
+            <HeroSection onStartPlanning={handleStartPlanning} />
+            <StateDestinations />
+          </>
         )}
         
         {activeTab === 'plan' && (

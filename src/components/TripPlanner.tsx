@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MapPin, Calendar, DollarSign, Users, Train, Plane, Bus, Hotel, ChevronRight } from 'lucide-react';
+import { MapPin, Calendar, DollarSign, Users, Train, Plane, Bus, Hotel, ChevronRight, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -22,12 +22,45 @@ const transportOptions = [
   { id: 'bus', label: 'Bus', icon: Bus, classes: ['AC Sleeper', 'AC Semi-Sleeper', 'Non-AC'] },
 ];
 
+const indianStates = [
+  { code: 'AP', name: 'Andhra Pradesh', popularDestinations: ['Tirupati', 'Srisailam', 'Kanaka Durga Temple'] },
+  { code: 'AR', name: 'Arunachal Pradesh', popularDestinations: ['Tawang Monastery', 'Parasuram Kund'] },
+  { code: 'AS', name: 'Assam', popularDestinations: ['Kamakhya Temple', 'Umananda Temple'] },
+  { code: 'BR', name: 'Bihar', popularDestinations: ['Bodh Gaya', 'Nalanda', 'Rajgir'] },
+  { code: 'CT', name: 'Chhattisgarh', popularDestinations: ['Ratanpur', 'Danteshwari Temple'] },
+  { code: 'GA', name: 'Goa', popularDestinations: ['Mangeshi Temple', 'Shantadurga Temple'] },
+  { code: 'GJ', name: 'Gujarat', popularDestinations: ['Somnath', 'Dwarka', 'Ambaji'] },
+  { code: 'HR', name: 'Haryana', popularDestinations: ['Kurukshetra', 'Panipat'] },
+  { code: 'HP', name: 'Himachal Pradesh', popularDestinations: ['Dharamshala', 'Shimla', 'Manali'] },
+  { code: 'JH', name: 'Jharkhand', popularDestinations: ['Baidyanath Dham', 'Parasnath'] },
+  { code: 'KA', name: 'Karnataka', popularDestinations: ['Mysore', 'Hampi', 'Udupi'] },
+  { code: 'KL', name: 'Kerala', popularDestinations: ['Sabarimala', 'Guruvayur', 'Padmanabhaswamy'] },
+  { code: 'MP', name: 'Madhya Pradesh', popularDestinations: ['Ujjain', 'Omkareshwar', 'Maheshwar'] },
+  { code: 'MH', name: 'Maharashtra', popularDestinations: ['Shirdi', 'Pandharpur', 'Trimbakeshwar'] },
+  { code: 'MN', name: 'Manipur', popularDestinations: ['Govindajee Temple', 'Shree Shree Bijoy Govinda'] },
+  { code: 'ML', name: 'Meghalaya', popularDestinations: ['Nartiang Monoliths', 'Mawphlang Sacred Forest'] },
+  { code: 'MZ', name: 'Mizoram', popularDestinations: ['Solomon Temple', 'Vantawng Falls'] },
+  { code: 'NL', name: 'Nagaland', popularDestinations: ['Kohima Cathedral', 'Mount Tiyi'] },
+  { code: 'OR', name: 'Odisha', popularDestinations: ['Puri Jagannath', 'Konark', 'Bhubaneswar'] },
+  { code: 'PB', name: 'Punjab', popularDestinations: ['Amritsar Golden Temple', 'Anandpur Sahib'] },
+  { code: 'RJ', name: 'Rajasthan', popularDestinations: ['Pushkar', 'Ajmer Sharif', 'Nathdwara'] },
+  { code: 'SK', name: 'Sikkim', popularDestinations: ['Rumtek Monastery', 'Pemayangtse Monastery'] },
+  { code: 'TN', name: 'Tamil Nadu', popularDestinations: ['Madurai', 'Thanjavur', 'Kanchipuram'] },
+  { code: 'TG', name: 'Telangana', popularDestinations: ['Bhadrachalam', 'Basara', 'Vemulawada'] },
+  { code: 'TR', name: 'Tripura', popularDestinations: ['Tripura Sundari Temple', 'Chaturdash Devata Temple'] },
+  { code: 'UP', name: 'Uttar Pradesh', popularDestinations: ['Varanasi', 'Mathura', 'Ayodhya'] },
+  { code: 'UT', name: 'Uttarakhand', popularDestinations: ['Haridwar', 'Rishikesh', 'Kedarnath'] },
+  { code: 'WB', name: 'West Bengal', popularDestinations: ['Dakshineswar', 'Belur Math', 'Kalighat'] },
+  { code: 'DL', name: 'Delhi', popularDestinations: ['Akshardham', 'Lotus Temple', 'Red Fort'] },
+];
+
 export function TripPlanner() {
   const [currentStep, setCurrentStep] = useState(1);
   const [showResults, setShowResults] = useState(false);
   const [formData, setFormData] = useState({
     homeLocation: '',
     destination: '',
+    customDestination: '',
     startDate: '',
     endDate: '',
     budget: '',
@@ -73,8 +106,12 @@ export function TripPlanner() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-sacred-gradient mb-2">Plan Your Sacred Journey</h1>
-          <p className="text-muted-foreground">Let us help you create the perfect pilgrimage experience</p>
+          <div className="inline-flex items-center space-x-2 bg-gradient-sacred text-white rounded-full px-4 py-2 mb-4">
+            <Sparkles className="h-4 w-4" />
+            <span className="text-sm font-medium">AI-Powered Trip Planning</span>
+          </div>
+          <h1 className="text-4xl font-bold text-sacred-gradient mb-2">Plan Your Sacred Journey</h1>
+          <p className="text-muted-foreground text-lg">Discover India's 29 states and create the perfect pilgrimage experience</p>
         </div>
 
         {/* Progress Bar */}
@@ -118,15 +155,39 @@ export function TripPlanner() {
                   
                   <div className="space-y-2">
                     <Label htmlFor="destination">Spiritual Destination</Label>
-                    <Input
-                      id="destination"
-                      placeholder="e.g., Varanasi, Tirupati, Rishikesh, Kedarnath..."
-                      value={formData.destination}
-                      onChange={(e) => updateFormData('destination', e.target.value)}
-                      className="h-12"
-                    />
+                    <Select value={formData.destination} onValueChange={(value) => updateFormData('destination', value)}>
+                      <SelectTrigger className="h-12">
+                        <SelectValue placeholder="Select your spiritual destination" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        <SelectItem value="custom">
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-4 w-4" />
+                            Type custom destination...
+                          </div>
+                        </SelectItem>
+                        {indianStates.map((state) => (
+                          <SelectItem key={state.code} value={state.name}>
+                            <div className="flex items-center justify-between w-full">
+                              <span>{state.name}</span>
+                              <span className="text-xs text-muted-foreground ml-2">
+                                {state.popularDestinations.slice(0, 2).join(', ')}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {formData.destination === 'custom' && (
+                      <Input
+                        placeholder="Type your custom destination..."
+                        value={formData.customDestination || ''}
+                        onChange={(e) => updateFormData('customDestination', e.target.value)}
+                        className="h-12 mt-2"
+                      />
+                    )}
                     <div className="text-xs text-muted-foreground">
-                      Popular destinations: Varanasi, Tirupati, Rishikesh, Haridwar, Mathura, Kedarnath, Badrinath, Amritsar
+                      Choose from 29 Indian states or enter a custom destination
                     </div>
                   </div>
                 </div>
@@ -311,7 +372,7 @@ export function TripPlanner() {
                 onClick={handleNext}
                 className="btn-sacred"
                 disabled={
-                  (currentStep === 1 && (!formData.homeLocation || !formData.destination)) ||
+                  (currentStep === 1 && (!formData.homeLocation || (!formData.destination || (formData.destination === 'custom' && !formData.customDestination)))) ||
                   (currentStep === 2 && (!formData.startDate || !formData.endDate)) ||
                   (currentStep === 3 && !formData.budget) ||
                   (currentStep === 4 && (!formData.transport || !formData.transportClass))

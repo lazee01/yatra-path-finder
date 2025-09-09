@@ -79,8 +79,12 @@ export function HeroSection({ onStartPlanning }: HeroSectionProps) {
               variant="outline" 
               size="lg"
               className="text-white border-white/30 bg-white/10 backdrop-blur-sm hover:bg-white/20 text-lg px-8 py-6"
+              onClick={() => {
+                const destinationsSection = document.querySelector('.state-destinations');
+                destinationsSection?.scrollIntoView({ behavior: 'smooth' });
+              }}
             >
-              Explore Destinations
+              Explore 29 States
             </Button>
           </div>
 
