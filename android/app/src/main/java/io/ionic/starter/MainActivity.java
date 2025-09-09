@@ -8,7 +8,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Registers the BridgePlugin
-        registerPlugin(com.getcapacitor.community.admob.AdMob.class);
+         // Registers the BridgePlugin
+         // registerPlugin(com.getcapacitor.community.admob.AdMob.class);
     }
 }
