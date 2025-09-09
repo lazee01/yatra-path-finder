@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Home, MapPin, Calendar, User, HelpCircle, MessageCircle, Menu, X } from 'lucide-react';
+import { Home, MapPin, Calendar, User, HelpCircle, MessageCircle, Menu, X, LogIn } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import mokshayatraLogo from '@/assets/moksha-yatra-logo.png';
 
 const navigationItems = [
   { id: 'home', label: 'Home', icon: Home, path: '/' },
@@ -31,11 +31,9 @@ export function Navigation({ activeTab = 'home', onTabChange }: NavigationProps)
       {/* Desktop Navigation - Top Bar */}
       <nav className="hidden lg:flex items-center justify-between bg-background/95 backdrop-blur-sm border-b px-6 py-4 sticky top-0 z-50">
         <div className="flex items-center space-x-3">
-          <img 
-            src={mokshayatraLogo} 
-            alt="Moksha Yatra AI" 
-            className="h-10 w-auto object-contain"
-          />
+          <span className="text-xl font-bold text-sacred-gradient">
+            MOKSHA YATRA AI
+          </span>
         </div>
         
         <div className="flex items-center space-x-1">
@@ -47,8 +45,8 @@ export function Navigation({ activeTab = 'home', onTabChange }: NavigationProps)
               onClick={() => handleTabClick(item.id)}
               className={cn(
                 "flex items-center space-x-2 transition-all duration-200",
-                activeTab === item.id 
-                  ? "bg-gradient-sacred text-white shadow-sacred" 
+                activeTab === item.id
+                  ? "bg-gradient-sacred text-white shadow-sacred"
                   : "hover:bg-muted text-muted-foreground hover:text-foreground"
               )}
             >
@@ -56,6 +54,19 @@ export function Navigation({ activeTab = 'home', onTabChange }: NavigationProps)
               <span>{item.label}</span>
             </Button>
           ))}
+
+          <div className="ml-4 pl-4 border-l border-border">
+            <Link to="/login">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex items-center space-x-2 border-primary/20 hover:border-primary/40 hover:bg-primary/5"
+              >
+                <LogIn className="h-4 w-4" />
+                <span>Login</span>
+              </Button>
+            </Link>
+          </div>
         </div>
       </nav>
 
@@ -115,8 +126,8 @@ export function Navigation({ activeTab = 'home', onTabChange }: NavigationProps)
                   onClick={() => handleTabClick(item.id)}
                   className={cn(
                     "w-full justify-start space-x-3 h-12 text-left transition-all duration-200",
-                    activeTab === item.id 
-                      ? "bg-gradient-sacred text-white shadow-sacred" 
+                    activeTab === item.id
+                      ? "bg-gradient-sacred text-white shadow-sacred"
                       : "hover:bg-muted"
                   )}
                 >
@@ -124,6 +135,18 @@ export function Navigation({ activeTab = 'home', onTabChange }: NavigationProps)
                   <span className="font-medium">{item.label}</span>
                 </Button>
               ))}
+
+              <div className="pt-4 mt-4 border-t border-border">
+                <Link to="/login" onClick={() => setIsMobileMenuOpen(false)}>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start space-x-3 h-12 text-left border-primary/20 hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <LogIn className="h-5 w-5" />
+                    <span className="font-medium">Login</span>
+                  </Button>
+                </Link>
+              </div>
             </div>
           </div>
         </div>
