@@ -47,7 +47,8 @@ export function HeroSection({ onStartPlanning }: HeroSectionProps) {
           <div className="space-y-4">
             <div className="inline-flex items-center space-x-2 bg-white/10 backdrop-blur-sm rounded-full px-4 py-2 text-white/90 text-sm font-medium">
               <Sparkles className="h-4 w-4" />
-              <span>India's #1 Spiritual Travel Planner</span>
+              <span>“Moksha Yatra , Where the Soul Finds Peace”</span>
+              <Sparkles className="h-4 w-4" />
             </div>
             
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-tight">
