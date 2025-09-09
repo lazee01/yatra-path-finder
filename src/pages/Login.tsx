@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import logoImage from '@/assets/moksha-yatra-logo.png';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -36,9 +37,13 @@ const Login = () => {
               <Sparkles className="h-8 w-8 text-white" />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-sacred-gradient mb-2">
-            MOKSHA YATRA AI
-          </h1>
+          <div className="mb-2">
+            <img
+              src={logoImage}
+              alt="Moksha Yatra AI"
+              className="h-10 w-auto mx-auto"
+            />
+          </div>
           <p className="text-muted-foreground">
             Sign in to your spiritual journey
           </p>
