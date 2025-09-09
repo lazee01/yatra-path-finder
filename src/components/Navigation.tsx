@@ -3,6 +3,7 @@ import { Home, MapPin, Calendar, User, HelpCircle, MessageCircle, Menu, X, LogIn
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import logoImage from '@/assets/moksha-yatra-logo.png';
 
 const navigationItems = [
   { id: 'home', label: 'Home', icon: Home, path: '/' },
@@ -31,9 +32,11 @@ export function Navigation({ activeTab = 'home', onTabChange }: NavigationProps)
       {/* Desktop Navigation - Top Bar */}
       <nav className="hidden lg:flex items-center justify-between bg-background/95 backdrop-blur-sm border-b px-6 py-4 sticky top-0 z-50">
         <div className="flex items-center space-x-3">
-          <span className="text-xl font-bold text-sacred-gradient">
-            MOKSHA YATRA AI
-          </span>
+          <img
+            src={logoImage}
+            alt="Moksha Yatra AI"
+            className="h-8 w-auto"
+          />
         </div>
         
         <div className="flex items-center space-x-1">
@@ -81,8 +84,8 @@ export function Navigation({ activeTab = 'home', onTabChange }: NavigationProps)
               onClick={() => handleTabClick(item.id)}
               className={cn(
                 "flex flex-col items-center space-y-1 h-14 w-14 p-1 rounded-xl transition-all duration-200",
-                activeTab === item.id 
-                  ? "bg-gradient-sacred text-white shadow-sacred" 
+                activeTab === item.id
+                  ? "bg-gradient-sacred text-white shadow-sacred"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
               )}
             >

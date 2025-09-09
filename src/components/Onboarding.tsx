@@ -6,12 +6,13 @@ import { cn } from '@/lib/utils';
 import onboarding1 from '@/assets/onboarding-1.jpg';
 import onboarding2 from '@/assets/onboarding-2.jpg';
 import onboarding3 from '@/assets/onboarding-3.jpg';
+import logoImage from '@/assets/moksha-yatra-logo.png';
 
 const slides = [
   {
     id: 1,
     title: 'Plan your hassle-free',
-    highlight: 'MOKSHA YATRA AI',
+    highlight: 'Spiritual Journey',
     description: 'Discover sacred destinations across India with personalized pilgrimage planning tailored to your spiritual needs.',
     image: onboarding1,
     icon: Sparkles,
@@ -69,10 +70,11 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       {/* Header */}
       <div className="flex items-center justify-between p-6">
         <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-gradient-sacred rounded-lg flex items-center justify-center">
-            <Sparkles className="h-5 w-5 text-white" />
-          </div>
-          <span className="font-bold text-lg text-sacred-gradient">MOKSHA YATRA AI</span>
+          <img
+            src={logoImage}
+            alt="Moksha Yatra AI"
+            className="h-6 w-auto"
+          />
         </div>
         
         <Button variant="ghost" onClick={onComplete} className="text-muted-foreground hover:text-foreground">
