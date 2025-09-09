@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+     allowedHosts: "all",  // ✅ Add this line to fix blocked host error
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
