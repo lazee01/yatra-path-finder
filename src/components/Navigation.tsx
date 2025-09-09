@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Home, MapPin, Calendar, User, HelpCircle, MessageCircle, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import mokshayatraLogo from '@/assets/moksha-yatra-logo.png';
 
 const navigationItems = [
   { id: 'home', label: 'Home', icon: Home, path: '/' },
@@ -29,11 +30,12 @@ export function Navigation({ activeTab = 'home', onTabChange }: NavigationProps)
     <>
       {/* Desktop Navigation - Top Bar */}
       <nav className="hidden lg:flex items-center justify-between bg-background/95 backdrop-blur-sm border-b px-6 py-4 sticky top-0 z-50">
-        <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-gradient-sacred rounded-lg flex items-center justify-center">
-            <MapPin className="h-5 w-5 text-white" />
-          </div>
-          <h1 className="text-xl font-bold text-sacred-gradient">SpiritualJourney</h1>
+        <div className="flex items-center space-x-3">
+          <img 
+            src={mokshayatraLogo} 
+            alt="Moksha Yatra AI" 
+            className="h-10 w-auto object-contain"
+          />
         </div>
         
         <div className="flex items-center space-x-1">
