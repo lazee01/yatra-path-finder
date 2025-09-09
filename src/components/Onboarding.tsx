@@ -11,7 +11,7 @@ const slides = [
   {
     id: 1,
     title: 'Plan your hassle-free',
-    highlight: 'Spiritual Journey',
+    highlight: 'MOKSHA YATRA AI',
     description: 'Discover sacred destinations across India with personalized pilgrimage planning tailored to your spiritual needs.',
     image: onboarding1,
     icon: Sparkles,
@@ -72,7 +72,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           <div className="w-8 h-8 bg-gradient-sacred rounded-lg flex items-center justify-center">
             <Sparkles className="h-5 w-5 text-white" />
           </div>
-          <span className="font-bold text-lg text-sacred-gradient">SpiritualJourney</span>
+          <span className="font-bold text-lg text-sacred-gradient">MOKSHA YATRA AI</span>
         </div>
         
         <Button variant="ghost" onClick={onComplete} className="text-muted-foreground hover:text-foreground">
