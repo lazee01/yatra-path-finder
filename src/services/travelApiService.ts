@@ -206,9 +206,23 @@ export class TravelApiService {
   // Get coordinates for a destination
   static async getCoordinates(destination: string): Promise<{ lat: number; lng: number } | null> {
     try {
+      const apiKey = this.API_KEYS.opencage;
+      
+      // If no API key configured, use predefined coordinates for common destinations
+      if (!apiKey || apiKey === 'YOUR_OPENCAGE_KEY') {
+        console.warn('OpenCage API key not configured, using predefined coordinates');
+        return this.getPredefinedCoordinates(destination);
+      }
+
       const response = await fetch(
-        `${this.BASE_URLS.geocoding}?q=${encodeURIComponent(destination)}&key=${this.API_KEYS.opencage}&limit=1`
+        `${this.BASE_URLS.geocoding}?q=${encodeURIComponent(destination)}&key=${apiKey}&limit=1`
       );
+      
+      if (!response.ok) {
+        console.warn(`OpenCage API failed with status ${response.status}, using predefined coordinates`);
+        return this.getPredefinedCoordinates(destination);
+      }
+      
       const data = await response.json();
       
       if (data.results && data.results.length > 0) {
@@ -218,11 +232,78 @@ export class TravelApiService {
           lng: result.geometry.lng
         };
       }
-      return null;
+      
+      // Fallback to predefined coordinates if API returns no results
+      return this.getPredefinedCoordinates(destination);
     } catch (error) {
       console.error('Error fetching coordinates:', error);
-      return null;
+      return this.getPredefinedCoordinates(destination);
     }
+  }
+
+  // Predefined coordinates for common spiritual destinations in India
+  private static getPredefinedCoordinates(destination: string): { lat: number; lng: number } | null {
+    const coords = {
+      varanasi: { lat: 25.3176, lng: 82.9739 },
+      tirupati: { lat: 13.6288, lng: 79.4192 },
+      rishikesh: { lat: 30.0869, lng: 78.2676 },
+      haridwar: { lat: 29.9457, lng: 78.1642 },
+      kedarnath: { lat: 30.7346, lng: 79.0669 },
+      badrinath: { lat: 30.7433, lng: 79.4938 },
+      amritsar: { lat: 31.6340, lng: 74.8723 },
+      'golden temple': { lat: 31.6200, lng: 74.8765 },
+      mysore: { lat: 12.2958, lng: 76.6394 },
+      hampi: { lat: 15.3350, lng: 76.4600 },
+      goa: { lat: 15.2993, lng: 74.1240 },
+      kerala: { lat: 10.8505, lng: 76.2711 },
+      kanyakumari: { lat: 8.0883, lng: 77.5385 },
+      madurai: { lat: 9.9252, lng: 78.1198 },
+      thanjavur: { lat: 10.7870, lng: 79.1378 },
+      puri: { lat: 19.8135, lng: 85.8312 },
+      konark: { lat: 19.8877, lng: 86.0945 },
+      ajmer: { lat: 26.4499, lng: 74.6399 },
+      pushkar: { lat: 26.4897, lng: 74.5511 },
+      udaipur: { lat: 24.5854, lng: 73.7125 },
+      jaipur: { lat: 26.9124, lng: 75.7873 },
+      jodhpur: { lat: 26.2389, lng: 73.0243 },
+      jaisalmer: { lat: 26.9157, lng: 70.9083 },
+      bikaner: { lat: 28.0229, lng: 73.3119 },
+      'mount abu': { lat: 24.5925, lng: 72.7156 },
+      chittorgarh: { lat: 24.8887, lng: 74.6269 },
+      mathura: { lat: 27.4924, lng: 77.6737 },
+      vrindavan: { lat: 27.5806, lng: 77.7064 },
+      ayodhya: { lat: 26.7922, lng: 82.1998 },
+      somnath: { lat: 20.8880, lng: 70.4017 },
+      dwarka: { lat: 22.2394, lng: 68.9678 },
+      rameswaram: { lat: 9.2881, lng: 79.3129 },
+      shirdi: { lat: 19.7645, lng: 74.4769 },
+      nashik: { lat: 19.9975, lng: 73.7898 },
+      pune: { lat: 18.5204, lng: 73.8567 },
+      mumbai: { lat: 19.0760, lng: 72.8777 },
+      delhi: { lat: 28.7041, lng: 77.1025 },
+      kolkata: { lat: 22.5726, lng: 88.3639 },
+      chennai: { lat: 13.0827, lng: 80.2707 },
+      bangalore: { lat: 12.9716, lng: 77.5946 },
+      hyderabad: { lat: 17.3850, lng: 78.4867 }
+    };
+
+    const dest = destination.toLowerCase().trim();
+    
+    // Try exact match first
+    if (coords[dest]) {
+      return coords[dest];
+    }
+    
+    // Try partial match
+    for (const [place, coord] of Object.entries(coords)) {
+      if (dest.includes(place) || place.includes(dest)) {
+        return coord;
+      }
+    }
+    
+    // Default to Varanasi coordinates if no match found
+    console.warn(`No coordinates found for ${destination}, using Varanasi as default`);
+    return coords.varanasi;
   }
 
   // Get temples and spiritual places (with custom data support)
@@ -284,24 +365,49 @@ export class TravelApiService {
   private static getMockTemples(destination: string): TempleData[] {
     const temples = {
       varanasi: [
-        { name: 'Kashi Vishwanath Temple', pujaTimings: '4:00 AM - 11:00 PM', onlineBooking: true },
-        { name: 'Sankat Mochan Hanuman Temple', pujaTimings: '5:00 AM - 10:00 PM', onlineBooking: false },
-        { name: 'Durga Temple', pujaTimings: '6:00 AM - 12:00 PM, 4:00 PM - 9:00 PM', onlineBooking: true }
+        { name: 'Kashi Vishwanath Temple', pujaTimings: '4:00 AM - 11:00 PM', onlineBooking: true, description: 'One of the most sacred Shiva temples' },
+        { name: 'Sankat Mochan Hanuman Temple', pujaTimings: '5:00 AM - 10:00 PM', onlineBooking: false, description: 'Famous Hanuman temple founded by Tulsidas' },
+        { name: 'Durga Temple', pujaTimings: '6:00 AM - 12:00 PM, 4:00 PM - 9:00 PM', onlineBooking: true, description: 'Beautiful red temple dedicated to Goddess Durga' },
+        { name: 'Annapurna Temple', pujaTimings: '6:00 AM - 1:00 PM, 5:00 PM - 10:00 PM', onlineBooking: false, description: 'Dedicated to the goddess of food and nourishment' }
       ],
       tirupati: [
-        { name: 'Sri Venkateswara Temple', pujaTimings: '2:30 AM - 1:00 AM', onlineBooking: true },
-        { name: 'Sri Kapileswara Swamy Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: false },
-        { name: 'ISKCON Tirupati', pujaTimings: '4:30 AM - 1:00 PM, 4:00 PM - 8:30 PM', onlineBooking: true }
+        { name: 'Sri Venkateswara Temple', pujaTimings: '2:30 AM - 1:00 AM', onlineBooking: true, description: 'Most visited Hindu temple in the world' },
+        { name: 'Sri Kapileswara Swamy Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: false, description: 'Ancient Shiva temple with natural spring' },
+        { name: 'ISKCON Tirupati', pujaTimings: '4:30 AM - 1:00 PM, 4:00 PM - 8:30 PM', onlineBooking: true, description: 'Modern Krishna temple with spiritual programs' },
+        { name: 'Sri Padmavathi Ammavari Temple', pujaTimings: '5:30 AM - 12:30 PM, 3:00 PM - 9:00 PM', onlineBooking: true, description: 'Dedicated to Goddess Padmavathi, consort of Lord Venkateswara' }
+      ],
+      rishikesh: [
+        { name: 'Triveni Ghat', pujaTimings: '5:00 AM - 9:00 PM', onlineBooking: false, description: 'Sacred bathing ghat where three rivers meet' },
+        { name: 'Neelkanth Mahadev Temple', pujaTimings: '6:00 AM - 6:00 PM', onlineBooking: false, description: 'Temple where Lord Shiva drank poison' },
+        { name: 'Bharat Mandir', pujaTimings: '6:00 AM - 12:00 PM, 4:00 PM - 8:00 PM', onlineBooking: false, description: 'Oldest temple in Rishikesh dedicated to Lord Vishnu' },
+        { name: 'Parmarth Niketan', pujaTimings: '5:00 AM - 10:00 PM', onlineBooking: true, description: 'Spiritual ashram with Ganga Aarti ceremonies' }
+      ],
+      amritsar: [
+        { name: 'Golden Temple (Harmandir Sahib)', pujaTimings: '24 Hours Open', onlineBooking: false, description: 'Most sacred Sikh temple covered in gold' },
+        { name: 'Durgiana Temple', pujaTimings: '6:00 AM - 10:00 PM', onlineBooking: false, description: 'Hindu temple replica of Golden Temple' },
+        { name: 'Ram Tirath Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: false, description: 'Ancient temple associated with Ramayana' },
+        { name: 'Gurudwara Baba Atal', pujaTimings: '24 Hours Open', onlineBooking: false, description: 'Nine-story octagonal tower and gurudwara' }
+      ],
+      haridwar: [
+        { name: 'Har Ki Pauri', pujaTimings: '5:00 AM - 10:00 PM', onlineBooking: false, description: 'Most sacred ghat on the Ganges in Haridwar' },
+        { name: 'Chandi Devi Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: true, description: 'Temple on Neel Parvat accessible by cable car' },
+        { name: 'Mansa Devi Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: true, description: 'Temple dedicated to wish-fulfilling goddess' },
+        { name: 'Maya Devi Temple', pujaTimings: '6:00 AM - 12:00 PM, 4:00 PM - 9:00 PM', onlineBooking: false, description: 'One of the Shakti Peethas, birthplace of Goddess Sati' }
       ]
     };
 
-    const defaultTemples = [
-      { name: 'Main Temple', pujaTimings: '5:00 AM - 12:00 PM, 4:00 PM - 9:00 PM', onlineBooking: true },
-      { name: 'Ancient Temple', pujaTimings: '6:00 AM - 11:00 PM', onlineBooking: false },
-      { name: 'Sacred Shrine', pujaTimings: '4:00 AM - 10:00 PM', onlineBooking: true }
-    ];
-
-    const templeList = temples[destination.toLowerCase()] || defaultTemples;
+    const dest = destination.toLowerCase().trim();
+    let templeList = temples[dest];
+    
+    // If no specific temples found, create destination-specific default temples
+    if (!templeList) {
+      templeList = [
+        { name: `${destination} Main Temple`, pujaTimings: '5:00 AM - 12:00 PM, 4:00 PM - 9:00 PM', onlineBooking: true, description: `Primary spiritual center of ${destination}` },
+        { name: `${destination} Ancient Temple`, pujaTimings: '6:00 AM - 11:00 PM', onlineBooking: false, description: `Historic temple with centuries of heritage in ${destination}` },
+        { name: `${destination} Sacred Shrine`, pujaTimings: '4:00 AM - 10:00 PM', onlineBooking: true, description: `Peaceful shrine for meditation and prayers in ${destination}` },
+        { name: `${destination} Heritage Temple`, pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: false, description: `Traditional temple showcasing local architectural style` }
+      ];
+    }
     
     return templeList.map((temple, index) => ({
       ...temple,
@@ -313,22 +419,69 @@ export class TravelApiService {
   }
 
   private static getMockAttractions(destination: string): AttractionData[] {
-    const attractions = [
-      'Ganga Aarti Ghat',
-      'Ancient Fort',
-      'River Cruise',
-      'Local Market',
-      'Heritage Walk',
-      'Spiritual Center'
-    ];
+    const locationAttractions: { [key: string]: Array<{name: string, type: string, description: string}> } = {
+      varanasi: [
+        { name: 'Dashashwamedh Ghat', type: 'Spiritual', description: 'Main ghat famous for evening Ganga Aarti ceremony' },
+        { name: 'Sarnath Archaeological Site', type: 'Heritage', description: 'Where Buddha gave his first sermon after enlightenment' },
+        { name: 'Ramnagar Fort', type: 'Heritage', description: '18th-century fort with vintage car collection and museum' },
+        { name: 'Banaras Hindu University', type: 'Cultural', description: 'One of Asia\'s largest residential universities with beautiful campus' },
+        { name: 'Manikarnika Ghat', type: 'Spiritual', description: 'Most sacred cremation ghat for Hindus' },
+        { name: 'Assi Ghat', type: 'Cultural', description: 'Popular ghat for spiritual seekers and cultural activities' }
+      ],
+      tirupati: [
+        { name: 'Tirumala Hills', type: 'Natural', description: 'Sacred hills housing the famous Venkateswara Temple' },
+        { name: 'Sri Vari Museum', type: 'Cultural', description: 'Museum showcasing temple artifacts and history' },
+        { name: 'Akasaganga Theertham', type: 'Natural', description: 'Sacred waterfall believed to have healing properties' },
+        { name: 'Sila Thoranam', type: 'Natural', description: 'Natural rock formation mentioned in ancient scriptures' },
+        { name: 'TTD Gardens', type: 'Natural', description: 'Beautiful botanical gardens with rare plants and flowers' },
+        { name: 'Regional Science Centre', type: 'Cultural', description: 'Interactive science museum for families' }
+      ],
+      rishikesh: [
+        { name: 'Laxman Jhula', type: 'Heritage', description: 'Iconic suspension bridge across the Ganges' },
+        { name: 'Beatles Ashram', type: 'Cultural', description: 'Former ashram where The Beatles stayed and meditated' },
+        { name: 'River Rafting', type: 'Natural', description: 'Thrilling white water rafting on the Ganges' },
+        { name: 'Ram Jhula', type: 'Heritage', description: 'Another famous suspension bridge with spiritual significance' },
+        { name: 'Rajaji National Park', type: 'Natural', description: 'Wildlife sanctuary with elephants, tigers, and diverse flora' },
+        { name: 'Yoga Ashrams', type: 'Spiritual', description: 'World-renowned yoga and meditation centers' }
+      ],
+      amritsar: [
+        { name: 'Jallianwala Bagh', type: 'Heritage', description: 'Memorial of the tragic 1919 massacre, symbol of freedom struggle' },
+        { name: 'Wagah Border', type: 'Cultural', description: 'Famous border ceremony between India and Pakistan' },
+        { name: 'Partition Museum', type: 'Heritage', description: 'Museum documenting the 1947 partition of India' },
+        { name: 'Gobindgarh Fort', type: 'Heritage', description: 'Historic Sikh fort with cultural shows and exhibitions' },
+        { name: 'Hall Bazaar', type: 'Cultural', description: 'Traditional market for Punjabi textiles, jewelry, and handicrafts' },
+        { name: 'Maharaja Ranjit Singh Museum', type: 'Heritage', description: 'Museum dedicated to the Lion of Punjab' }
+      ]
+    };
 
-    return attractions.map((name, index) => ({
-      name,
-      type: ['Heritage', 'Spiritual', 'Natural', 'Cultural'][index % 4],
-      description: `Experience the beauty and culture of ${destination}`,
-      rating: Math.round((Math.random() * 2 + 3) * 10) / 10,
-      imageUrl: `/api/placeholder/300/200?attraction=${index}`,
-      coordinates: { lat: 25.3176 + Math.random() * 0.1, lng: 82.9739 + Math.random() * 0.1 }
+    const dest = destination.toLowerCase().trim();
+    let attractionList = locationAttractions[dest];
+    
+    // If no specific attractions found, create generic ones with destination name
+    if (!attractionList) {
+      attractionList = [
+        { name: `${destination} Heritage Walk`, type: 'Cultural', description: `Guided tour through historic areas of ${destination}` },
+        { name: `${destination} Local Market`, type: 'Cultural', description: `Traditional market showcasing local crafts and cuisine` },
+        { name: `${destination} Spiritual Center`, type: 'Spiritual', description: `Main spiritual and meditation center in ${destination}` },
+        { name: `${destination} Viewpoint`, type: 'Natural', description: `Scenic viewpoint offering panoramic views of ${destination}` },
+        { name: `${destination} Museum`, type: 'Heritage', description: `Museum showcasing history and culture of ${destination}` },
+        { name: `${destination} Gardens`, type: 'Natural', description: `Beautiful gardens for relaxation and nature walks` }
+      ];
+    }
+
+    // Get coordinates for the destination to make locations more realistic
+    const coords = this.getPredefinedCoordinates(destination) || { lat: 25.3176, lng: 82.9739 };
+
+    return attractionList.map((attraction, index) => ({
+      name: attraction.name,
+      type: attraction.type,
+      description: attraction.description,
+      rating: Math.round((Math.random() * 1.5 + 3.5) * 10) / 10,
+      imageUrl: `/api/placeholder/300/200?attraction=${dest}-${index}`,
+      coordinates: { 
+        lat: coords.lat + (Math.random() - 0.5) * 0.02, 
+        lng: coords.lng + (Math.random() - 0.5) * 0.02 
+      }
     }));
   }
 
@@ -1597,40 +1750,54 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
     const basePrice = 2000;
     const multiplier = budgetMultiplier[budget as keyof typeof budgetMultiplier] || 1;
 
-    const hotelTemplates = [
-      {
-        name: 'Temple View Hotel',
-        location: `Near Main Temple, ${destination}`,
-        amenities: ['Free WiFi', 'AC', 'Restaurant', 'Temple Shuttle', 'Prayer Room'],
-        imageSuffix: 'temple'
-      },
-      {
-        name: 'Spiritual Retreat',
-        location: `Peaceful Area, ${destination}`,
-        amenities: ['Free WiFi', 'AC', 'Meditation Garden', 'Yoga Classes', 'Vegetarian Restaurant'],
-        imageSuffix: 'retreat'
-      },
-      {
-        name: 'Pilgrim Comfort Inn',
-        location: `City Center, ${destination}`,
-        amenities: ['Free WiFi', 'AC', 'Room Service', 'Travel Desk', 'Laundry'],
-        imageSuffix: 'comfort'
-      },
-      {
-        name: 'Sacred Stay Boutique',
-        location: `Heritage Area, ${destination}`,
-        amenities: ['Free WiFi', 'AC', 'Spa', 'Restaurant', 'Cultural Tours'],
-        imageSuffix: 'boutique'
-      }
-    ];
+    // Location-specific hotel data
+    const locationSpecificHotels: { [key: string]: any[] } = {
+      varanasi: [
+        { name: 'Ganga View Heritage Hotel', area: 'Assi Ghat', amenities: ['Ganga View', 'Temple Shuttle', 'Ayurvedic Spa'] },
+        { name: 'Kashi Spiritual Retreat', area: 'Dashashwamedh Ghat', amenities: ['Prayer Room', 'Yoga Classes', 'Vegetarian Restaurant'] },
+        { name: 'Benares Palace Hotel', area: 'Cantonment', amenities: ['Luxury Spa', 'Multi-cuisine Restaurant', 'Cultural Programs'] },
+        { name: 'Pilgrim Rest Inn', area: 'Godowlia', amenities: ['Budget Friendly', 'Free WiFi', 'Temple Tours'] }
+      ],
+      tirupati: [
+        { name: 'Tirumala Hills Resort', area: 'Near Temple', amenities: ['Darshan Booking', 'Free Temple Transport', 'Vegetarian Only'] },
+        { name: 'Balaji Comfort Lodge', area: 'Railway Station Area', amenities: ['Early Check-in', 'Prasadam Service', 'Travel Desk'] },
+        { name: 'Divine Stay Hotel', area: 'Bus Stand', amenities: ['Budget Rooms', 'Temple Packages', 'Free Breakfast'] },
+        { name: 'Venkateswara Grand', area: 'City Center', amenities: ['Luxury Amenities', 'Conference Hall', 'Multi-cuisine'] }
+      ],
+      rishikesh: [
+        { name: 'Ganga Kinare Hotel', area: 'Tapovan', amenities: ['River View', 'Yoga Classes', 'Meditation Garden'] },
+        { name: 'Himalayan Yoga Ashram', area: 'Laxman Jhula', amenities: ['Spiritual Programs', 'Organic Food', 'Silence Zones'] },
+        { name: 'Adventure & Spirituality Resort', area: 'Ram Jhula', amenities: ['River Rafting', 'Yoga Retreat', 'Ayurveda'] },
+        { name: 'Triveni Ghat Lodge', area: 'Triveni Ghat', amenities: ['Ganga Aarti View', 'Temple Proximity', 'Budget Friendly'] }
+      ],
+      amritsar: [
+        { name: 'Golden Temple Heritage Hotel', area: 'Heritage Street', amenities: ['Temple View', 'Sikh History Tours', 'Langar Access'] },
+        { name: 'Guru Nanak Palace', area: 'Hall Bazaar', amenities: ['Luxury Rooms', 'Punjabi Cuisine', 'Cultural Shows'] },
+        { name: 'Harmander Comfort Inn', area: 'Railway Station', amenities: ['Budget Stay', 'Early Check-in', 'Temple Shuttle'] },
+        { name: 'Sikh Heritage Resort', area: 'GT Road', amenities: ['Historical Tours', 'Traditional Food', 'Garden Restaurant'] }
+      ]
+    };
 
-    return hotelTemplates.map((template, index) => ({
-      name: template.name,
+    const dest = destination.toLowerCase().trim();
+    let hotelData = locationSpecificHotels[dest];
+    
+    // If no specific data found, use generic templates but with destination-specific naming
+    if (!hotelData) {
+      hotelData = [
+        { name: `${destination} Temple View Hotel`, area: 'Near Main Temple', amenities: ['Temple Shuttle', 'Prayer Room', 'Vegetarian Food'] },
+        { name: `${destination} Spiritual Retreat`, area: 'Peaceful Area', amenities: ['Meditation Garden', 'Yoga Classes', 'Organic Food'] },
+        { name: `${destination} Pilgrim Inn`, area: 'City Center', amenities: ['Budget Friendly', 'Travel Desk', 'Temple Tours'] },
+        { name: `${destination} Heritage Stay`, area: 'Heritage Quarter', amenities: ['Cultural Tours', 'Local Cuisine', 'Art Gallery'] }
+      ];
+    }
+
+    return hotelData.map((hotel, index) => ({
+      name: hotel.name,
       rating: Math.round((Math.random() * 0.8 + 3.7) * 10) / 10,
       price: Math.round(basePrice * multiplier * (0.8 + Math.random() * 0.4)),
-      location: template.location,
-      amenities: template.amenities,
-      imageUrl: `/api/placeholder/300/200?hotel=${template.imageSuffix}`,
+      location: `${hotel.area}, ${destination}`,
+      amenities: ['Free WiFi', 'AC', ...hotel.amenities],
+      imageUrl: `/api/placeholder/300/200?hotel=${dest}-${index}`,
       cancellation: Math.random() > 0.5 ? 'Free cancellation until 24 hours before check-in' : 'Non-refundable'
     }));
   }
