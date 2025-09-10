@@ -4,10 +4,7 @@ const config: CapacitorConfig = {
   appId: 'app.lovable.db1ee6277c8f4a4ca47f1d57e5d34860',
   appName: 'Moksha Yatra AI',
   webDir: 'dist',
-  server: {
-    url: 'https://db1ee627-7c8f-4a4c-a47f-1d57e5d34860.lovableproject.com?forceHideBadge=true',
-    cleartext: true
-  },
+  // Removed server config to use local assets for better mobile compatibility
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,

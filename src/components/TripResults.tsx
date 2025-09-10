@@ -26,6 +26,15 @@ interface TripResultsProps {
   onBack: () => void;
 }
 
+interface CustomData {
+  temples: TempleData[];
+  hotels: HotelData[];
+  trains: TransportData[];
+  attractions: AttractionData[];
+  destinations: string[];
+  userPreferences: Record<string, unknown>;
+}
+
 export function TripResults({ formData, onBack }: TripResultsProps) {
   const [loading, setLoading] = useState(true);
   const [hotels, setHotels] = useState<HotelData[]>([]);
@@ -37,7 +46,7 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
   const [aiLoading, setAiLoading] = useState(false);
 
   // Custom data management
-  const [customData, setCustomData] = useState<any>(null);
+  const [customData, setCustomData] = useState<CustomData | null>(null);
   const [showCustomDialog, setShowCustomDialog] = useState(false);
   const [customFormData, setCustomFormData] = useState({
     type: 'temple',
@@ -58,7 +67,12 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
     try {
       const duration = Math.ceil((new Date(formData.endDate).getTime() - new Date(formData.startDate).getTime()) / (1000 * 60 * 60 * 24));
 
-      const [details, advice] = await Promise.all([
+      // Use Promise.race to timeout AI calls after 10 seconds to prevent hanging
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('AI request timeout')), 10000)
+      );
+
+      const aiPromise = Promise.all([
         TravelApiService.getTripDetailsWithGemini(formData.destination, {
           budget: formData.budget,
           duration: duration,
@@ -67,6 +81,9 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
         }),
         TravelApiService.getTravelAdvice(formData.destination, formData.startDate)
       ]);
+
+      const result = await Promise.race([aiPromise, timeoutPromise]) as [string, string];
+      const [details, advice] = result;
 
       setAiDetails(details);
       setTravelAdvice(advice);
@@ -82,6 +99,7 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
   const loadTripData = useCallback(async () => {
     setLoading(true);
     try {
+      // Load basic data first (non-AI dependent)
       const [hotelData, templeData, attractionData, transportData] = await Promise.all([
         TravelApiService.getHotels(formData.destination, formData.budget),
         TravelApiService.getTemples(formData.destination),
@@ -89,13 +107,18 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
         TravelApiService.getTransportOptions(formData.homeLocation, formData.destination, formData.transport)
       ]);
 
+      // Set basic data immediately for faster UI response
       setHotels(hotelData);
       setTemples(templeData);
       setAttractions(attractionData);
       setTransport(transportData);
 
-      // Load AI-enhanced data in background
-      loadAIData();
+      // Load AI-enhanced data in background (non-blocking)
+      loadAIData().catch(error => {
+        console.error('Error loading AI data:', error);
+        setAiDetails('AI enhancement temporarily unavailable');
+        setTravelAdvice('Please check official sources for current travel information');
+      });
     } catch (error) {
       console.error('Error loading trip data:', error);
     } finally {
@@ -171,7 +194,9 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
   // Handle deleting custom data
   const handleDeleteCustom = async (type: string, index: number) => {
     try {
-      await TravelApiService.deleteCustomItem(type as any, index);
+      // Map form type to API type
+      const apiType = type === 'temple' ? 'temples' : type === 'hotel' ? 'hotels' : type === 'train' ? 'trains' : 'attractions';
+      await TravelApiService.deleteCustomItem(apiType as 'temples' | 'hotels' | 'trains' | 'attractions', index);
       loadCustomData();
       loadTripData();
     } catch (error) {
@@ -806,7 +831,7 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      {customData.temples?.slice(0, 3).map((temple: any, index: number) => (
+                      {customData.temples?.slice(0, 3).map((temple, index: number) => (
                         <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
                           <span className="text-sm font-medium">{temple.name}</span>
                           <Button
@@ -836,7 +861,7 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      {customData.hotels?.slice(0, 3).map((hotel: any, index: number) => (
+                      {customData.hotels?.slice(0, 3).map((hotel, index: number) => (
                         <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
                           <div>
                             <span className="text-sm font-medium">{hotel.name}</span>
@@ -869,7 +894,7 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      {customData.trains?.slice(0, 3).map((train: any, index: number) => (
+                      {customData.trains?.slice(0, 3).map((train, index: number) => (
                         <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
                           <div>
                             <span className="text-sm font-medium">{train.name}</span>
