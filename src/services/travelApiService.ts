@@ -303,7 +303,7 @@ export class TravelApiService {
     return this.customData.userPreferences;
   }
 
-  // API keys
+  // API keys with validation
   private static API_KEYS = {
     opentripmap: import.meta.env.VITE_OPENTRIPMAP_API_KEY || '',
     opencage: import.meta.env.VITE_OPENCAGE_API_KEY || '',
@@ -323,6 +323,54 @@ export class TravelApiService {
     },
   };
 
+  // API validation and status tracking
+  private static apiStatus = {
+    opentripmap: { working: false, lastChecked: 0 },
+    opencage: { working: false, lastChecked: 0 },
+    openweather: { working: false, lastChecked: 0 },
+    gemini: { working: false, lastChecked: 0 },
+    indianRail: { working: false, lastChecked: 0 },
+    amadeus: { working: false, lastChecked: 0 },
+    booking: { working: false, lastChecked: 0 }
+  };
+
+  // Check if API key is valid (not empty, not demo, not placeholder)
+  private static isValidApiKey(apiKey: string): boolean {
+    if (!apiKey || apiKey.trim() === '') return false;
+    if (apiKey.toLowerCase().includes('demo')) return false;
+    if (apiKey.toLowerCase().includes('your_')) return false;
+    if (apiKey.toLowerCase().includes('placeholder')) return false;
+    if (apiKey.length < 10) return false; // Most API keys are longer than 10 chars
+    return true;
+  }
+
+  // Test API connectivity
+  private static async testApiConnectivity(apiName: string, testUrl: string, headers?: Record<string, string>): Promise<boolean> {
+    try {
+      const response = await fetch(testUrl, {
+        method: 'GET',
+        headers: headers || {},
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      });
+
+      const isWorking = response.ok || response.status === 401; // 401 means API key issues, but API is reachable
+      this.apiStatus[apiName as keyof typeof this.apiStatus] = {
+        working: isWorking,
+        lastChecked: Date.now()
+      };
+
+      console.log(`${apiName} API test: ${isWorking ? '✅ Working' : '❌ Failed'} (${response.status})`);
+      return isWorking;
+    } catch (error) {
+      console.warn(`${apiName} API test failed:`, error);
+      this.apiStatus[apiName as keyof typeof this.apiStatus] = {
+        working: false,
+        lastChecked: Date.now()
+      };
+      return false;
+    }
+  }
+
   // AI Models Configuration
   private static genAI = new GoogleGenerativeAI(this.API_KEYS.gemini);
 
@@ -337,30 +385,67 @@ export class TravelApiService {
   // Amadeus access token storage
   private static amadeusToken: { token: string; expires: number } | null = null;
 
-  // Get coordinates for a destination
+  // Get coordinates for a destination with improved error handling
   static async getCoordinates(destination: string): Promise<{ lat: number; lng: number } | null> {
     try {
-      // Check if OpenCage API key is configured
-      if (!this.API_KEYS.opencage || this.API_KEYS.opencage === '') {
-        console.warn('OpenCage API key not configured, using mock coordinates');
+      // Validate destination input
+      const validation = this.validateDestination(destination);
+      if (!validation.isValid) {
+        console.warn('Invalid destination:', validation.error);
         return this.getMockCoordinates(destination);
       }
 
+      const cleanDestination = validation.sanitized;
+
+      // Check if OpenCage API key is valid
+      if (!this.isValidApiKey(this.API_KEYS.opencage)) {
+        console.warn('OpenCage API key not configured or invalid, using mock coordinates');
+        return this.getMockCoordinates(cleanDestination);
+      }
+
+      // Test API connectivity if not recently checked
+      const lastChecked = this.apiStatus.opencage.lastChecked;
+      if (Date.now() - lastChecked > 300000) { // Check every 5 minutes
+        const testUrl = `${this.BASE_URLS.geocoding}?q=test&key=${this.API_KEYS.opencage}&limit=1`;
+        await this.testApiConnectivity('opencage', testUrl);
+      }
+
+      // Skip API call if we know it's not working
+      if (!this.apiStatus.opencage.working && Date.now() - lastChecked < 3600000) { // Within last hour
+        console.warn('OpenCage API previously failed, using mock coordinates');
+        return this.getMockCoordinates(cleanDestination);
+      }
+
+      console.log(`🔍 Fetching coordinates for: ${cleanDestination}`);
+
       const response = await fetch(
-        `${this.BASE_URLS.geocoding}?q=${encodeURIComponent(destination)}&key=${this.API_KEYS.opencage}&limit=1`
+        `${this.BASE_URLS.geocoding}?q=${encodeURIComponent(cleanDestination)}&key=${this.API_KEYS.opencage}&limit=1`,
+        {
+          signal: AbortSignal.timeout(10000) // 10 second timeout
+        }
       );
+
+      if (!response.ok) {
+        console.warn(`OpenCage API error: ${response.status} ${response.statusText}`);
+        return this.getMockCoordinates(cleanDestination);
+      }
+
       const data = await response.json();
 
       if (data.results && data.results.length > 0) {
         const result = data.results[0];
-        return {
+        const coordinates = {
           lat: result.geometry.lat,
           lng: result.geometry.lng
         };
+
+        console.log(`✅ Found coordinates for ${cleanDestination}:`, coordinates);
+        return coordinates;
       }
 
-      // Fallback to mock coordinates if no results
-      return this.getMockCoordinates(destination);
+      console.warn(`No coordinates found for ${cleanDestination}, using mock data`);
+      return this.getMockCoordinates(cleanDestination);
+
     } catch (error) {
       console.error('Error fetching coordinates:', error);
       return this.getMockCoordinates(destination);
@@ -401,8 +486,10 @@ export class TravelApiService {
     return coordinates[normalizedDestination] || { lat: 20.5937, lng: 78.9629 }; // Default to India center
   }
 
-  // Get temples and spiritual places (with custom data support)
+  // Get temples and spiritual places with improved API handling
   static async getTemples(destination: string): Promise<TempleData[]> {
+    console.log(`🏛️ Fetching temples for: ${destination}`);
+
     try {
       // Load custom temples for this destination
       let customTemples: TempleData[] = [];
@@ -414,6 +501,7 @@ export class TravelApiService {
           customTemples = result.data.filter(
             temple => temple.location.toLowerCase().includes(destination.toLowerCase())
           );
+          console.log(`📋 Found ${customTemples.length} custom temples`);
         }
       } else {
         // Fallback to localStorage
@@ -425,27 +513,57 @@ export class TravelApiService {
 
       const coords = await this.getCoordinates(destination);
       if (!coords) {
-        // Return custom temples + mock temples if no coordinates
+        console.warn('No coordinates available, using mock temples');
         return [...customTemples, ...this.getMockTemples(destination)];
       }
 
-      // Using OpenTripMap API for places of worship
+      // Check if OpenTripMap API key is valid
+      if (!this.isValidApiKey(this.API_KEYS.opentripmap)) {
+        console.warn('OpenTripMap API key not configured or invalid, using mock temples');
+        return [...customTemples, ...this.getMockTemples(destination)];
+      }
+
+      // Test API connectivity if not recently checked
+      const lastChecked = this.apiStatus.opentripmap.lastChecked;
+      if (Date.now() - lastChecked > 300000) { // Check every 5 minutes
+        const testUrl = `${this.BASE_URLS.places}/radius?radius=1000&lon=0&lat=0&kinds=religion&format=json&apikey=${this.API_KEYS.opentripmap}`;
+        await this.testApiConnectivity('opentripmap', testUrl);
+      }
+
+      // Skip API call if we know it's not working
+      if (!this.apiStatus.opentripmap.working && Date.now() - lastChecked < 3600000) { // Within last hour
+        console.warn('OpenTripMap API previously failed, using mock temples');
+        return [...customTemples, ...this.getMockTemples(destination)];
+      }
+
+      console.log(`🔍 Searching for temples near ${destination} (${coords.lat}, ${coords.lng})`);
+
+      // Using OpenTripMap API for places of worship with timeout
       const response = await fetch(
-        `${this.BASE_URLS.places}/radius?radius=10000&lon=${coords.lng}&lat=${coords.lat}&kinds=religion&format=json&apikey=${this.API_KEYS.opentripmap}`
+        `${this.BASE_URLS.places}/radius?radius=15000&lon=${coords.lng}&lat=${coords.lat}&kinds=religion&format=json&apikey=${this.API_KEYS.opentripmap}`,
+        {
+          signal: AbortSignal.timeout(15000) // 15 second timeout
+        }
       );
 
       let apiTemples: TempleData[] = [];
       if (response.ok) {
         const places = await response.json();
+        console.log(`✅ OpenTripMap returned ${places.length} places`);
+
         apiTemples = places.slice(0, 5).map((place: OpenTripMapPlace) => ({
           name: place.name || 'Sacred Temple',
           location: destination,
           pujaTimings: '5:00 AM - 12:00 PM, 4:00 PM - 9:00 PM',
-          description: 'Ancient temple with rich spiritual heritage',
-          imageUrl: place.preview?.source || '/api/placeholder/300/200',
+          description: place.wikipedia_extracts?.text || 'Ancient temple with rich spiritual heritage',
+          imageUrl: place.preview?.source || `/api/placeholder/300/200?temple=${Date.now()}`,
           onlineBooking: Math.random() > 0.5,
           coordinates: { lat: place.point.lat, lng: place.point.lon }
         }));
+
+        console.log(`✅ Processed ${apiTemples.length} temples from API`);
+      } else {
+        console.warn(`OpenTripMap API error: ${response.status} ${response.statusText}`);
       }
 
       // Combine custom temples, API temples, and mock temples
@@ -453,12 +571,17 @@ export class TravelApiService {
 
       // Remove duplicates based on name
       const uniqueTemples = allTemples.filter((temple, index, self) =>
-        index === self.findIndex(t => t.name === temple.name)
+        index === self.findIndex(t => t.name.toLowerCase() === temple.name.toLowerCase())
       );
 
-      return uniqueTemples.slice(0, 8); // Return up to 8 temples
+      const finalTemples = uniqueTemples.slice(0, 8);
+      console.log(`📋 Returning ${finalTemples.length} unique temples`);
+
+      return finalTemples;
+
     } catch (error) {
       console.error('Error fetching temples:', error);
+
       // Return custom temples + mock temples on error
       let customTemples: TempleData[] = [];
 
@@ -1810,13 +1933,39 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
 
   // ===== UPDATED METHODS WITH REAL API INTEGRATION =====
 
-  // Enhanced getAttractions with more detailed OpenTripMap data
+  // Enhanced getAttractions with improved API handling
   static async getAttractions(destination: string): Promise<AttractionData[]> {
+    console.log(`🎭 Fetching attractions for: ${destination}`);
+
     try {
       const coords = await this.getCoordinates(destination);
-      if (!coords) return this.getMockAttractions(destination);
+      if (!coords) {
+        console.warn('No coordinates available, using mock attractions');
+        return this.getMockAttractions(destination);
+      }
 
-      // Try enhanced OpenTripMap first
+      // Check if OpenTripMap API key is valid
+      if (!this.isValidApiKey(this.API_KEYS.opentripmap)) {
+        console.warn('OpenTripMap API key not configured or invalid, using mock attractions');
+        return this.getMockAttractions(destination);
+      }
+
+      // Test API connectivity if not recently checked
+      const lastChecked = this.apiStatus.opentripmap.lastChecked;
+      if (Date.now() - lastChecked > 300000) { // Check every 5 minutes
+        const testUrl = `${this.BASE_URLS.places}/radius?radius=1000&lon=0&lat=0&kinds=tourist_facilities&format=json&apikey=${this.API_KEYS.opentripmap}`;
+        await this.testApiConnectivity('opentripmap', testUrl);
+      }
+
+      // Skip API call if we know it's not working
+      if (!this.apiStatus.opentripmap.working && Date.now() - lastChecked < 3600000) { // Within last hour
+        console.warn('OpenTripMap API previously failed, using mock attractions');
+        return this.getMockAttractions(destination);
+      }
+
+      console.log(`🔍 Searching for attractions near ${destination} (${coords.lat}, ${coords.lng})`);
+
+      // Try enhanced OpenTripMap with timeout
       const enhancedPlaces = await this.getEnhancedPlacesByRadius(
         coords.lat,
         coords.lng,
@@ -1825,20 +1974,25 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
       );
 
       if (enhancedPlaces.length > 0) {
+        console.log(`✅ Found ${enhancedPlaces.length} enhanced places from OpenTripMap`);
+
         const attractions: AttractionData[] = enhancedPlaces.slice(0, 6).map((place: any) => ({
           name: place.name || 'Attraction',
           type: place.kinds?.split(',')[0] || 'Sightseeing',
           description: place.details?.description || place.wikipedia_extracts?.text || 'Popular tourist attraction worth visiting',
           rating: place.rate || Math.round((Math.random() * 2 + 3) * 10) / 10,
-          imageUrl: place.details?.image || place.preview?.source || '/api/placeholder/300/200',
+          imageUrl: place.details?.image || place.preview?.source || `/api/placeholder/300/200?attraction=${Date.now()}`,
           coordinates: { lat: place.point.lat, lng: place.point.lon }
         }));
 
+        console.log(`✅ Processed ${attractions.length} attractions from enhanced API`);
         return attractions.length > 0 ? attractions : this.getMockAttractions(destination);
       }
 
       // Fallback to original method
+      console.log('Enhanced API returned no results, trying original method');
       return await this.getOriginalAttractions(destination);
+
     } catch (error) {
       console.error('Error fetching attractions:', error);
       return this.getMockAttractions(destination);
@@ -2164,5 +2318,223 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
     }
 
     return mockTransport;
+  }
+
+  // ===== API DIAGNOSTICS AND TESTING =====
+
+  // Test all APIs and return status report
+  static async testAllApis(): Promise<Record<string, { working: boolean; error?: string; lastChecked: number }>> {
+    console.log('🔧 Testing all API connections...');
+
+    const results: Record<string, { working: boolean; error?: string; lastChecked: number }> = {};
+
+    // Test OpenCage (Geocoding)
+    try {
+      if (this.isValidApiKey(this.API_KEYS.opencage)) {
+        const testUrl = `${this.BASE_URLS.geocoding}?q=test&key=${this.API_KEYS.opencage}&limit=1`;
+        const working = await this.testApiConnectivity('opencage', testUrl);
+        results.opencage = {
+          working,
+          lastChecked: this.apiStatus.opencage.lastChecked
+        };
+      } else {
+        results.opencage = {
+          working: false,
+          error: 'Invalid or missing API key',
+          lastChecked: Date.now()
+        };
+      }
+    } catch (error: any) {
+      results.opencage = {
+        working: false,
+        error: error.message,
+        lastChecked: Date.now()
+      };
+    }
+
+    // Test OpenTripMap
+    try {
+      if (this.isValidApiKey(this.API_KEYS.opentripmap)) {
+        const testUrl = `${this.BASE_URLS.places}/radius?radius=1000&lon=0&lat=0&kinds=religion&format=json&apikey=${this.API_KEYS.opentripmap}`;
+        const working = await this.testApiConnectivity('opentripmap', testUrl);
+        results.opentripmap = {
+          working,
+          lastChecked: this.apiStatus.opentripmap.lastChecked
+        };
+      } else {
+        results.opentripmap = {
+          working: false,
+          error: 'Invalid or missing API key',
+          lastChecked: Date.now()
+        };
+      }
+    } catch (error: any) {
+      results.opentripmap = {
+        working: false,
+        error: error.message,
+        lastChecked: Date.now()
+      };
+    }
+
+    // Test OpenWeather
+    try {
+      if (this.isValidApiKey(this.API_KEYS.openweather)) {
+        const testUrl = `${this.BASE_URLS.weather}?q=test&appid=${this.API_KEYS.openweather}`;
+        const working = await this.testApiConnectivity('openweather', testUrl);
+        results.openweather = {
+          working,
+          lastChecked: this.apiStatus.openweather.lastChecked
+        };
+      } else {
+        results.openweather = {
+          working: false,
+          error: 'Invalid or missing API key',
+          lastChecked: Date.now()
+        };
+      }
+    } catch (error: any) {
+      results.openweather = {
+        working: false,
+        error: error.message,
+        lastChecked: Date.now()
+      };
+    }
+
+    // Test Gemini AI
+    try {
+      if (this.isValidApiKey(this.API_KEYS.gemini)) {
+        results.gemini = {
+          working: true, // Assume working if key is valid
+          lastChecked: Date.now()
+        };
+      } else {
+        results.gemini = {
+          working: false,
+          error: 'Invalid or missing API key',
+          lastChecked: Date.now()
+        };
+      }
+    } catch (error: any) {
+      results.gemini = {
+        working: false,
+        error: error.message,
+        lastChecked: Date.now()
+      };
+    }
+
+    // Test Indian Rail
+    try {
+      if (this.isValidApiKey(this.API_KEYS.indianRail.apiKey)) {
+        const testUrl = `https://${this.API_KEYS.indianRail.host}/api/trains/v1/train/status`;
+        const headers = {
+          'X-Rapidapi-Key': this.API_KEYS.indianRail.apiKey,
+          'X-Rapidapi-Host': this.API_KEYS.indianRail.host
+        };
+        const working = await this.testApiConnectivity('indianRail', testUrl, headers);
+        results.indianRail = {
+          working,
+          lastChecked: this.apiStatus.indianRail.lastChecked
+        };
+      } else {
+        results.indianRail = {
+          working: false,
+          error: 'Invalid or missing API key',
+          lastChecked: Date.now()
+        };
+      }
+    } catch (error: any) {
+      results.indianRail = {
+        working: false,
+        error: error.message,
+        lastChecked: Date.now()
+      };
+    }
+
+    // Test Amadeus
+    try {
+      if (this.isValidApiKey(this.API_KEYS.amadeus.apiKey)) {
+        results.amadeus = {
+          working: true, // Assume working if key is valid (will be tested on actual use)
+          lastChecked: Date.now()
+        };
+      } else {
+        results.amadeus = {
+          working: false,
+          error: 'Invalid or missing API key',
+          lastChecked: Date.now()
+        };
+      }
+    } catch (error: any) {
+      results.amadeus = {
+        working: false,
+        error: error.message,
+        lastChecked: Date.now()
+      };
+    }
+
+    // Test Booking.com
+    try {
+      if (this.isValidApiKey(this.API_KEYS.booking.apiKey)) {
+        const testUrl = `https://${this.API_KEYS.booking.host}/api/v1/hotels/searchDestination`;
+        const headers = {
+          'X-Rapidapi-Key': this.API_KEYS.booking.apiKey,
+          'X-Rapidapi-Host': this.API_KEYS.booking.host
+        };
+        const working = await this.testApiConnectivity('booking', testUrl, headers);
+        results.booking = {
+          working,
+          lastChecked: this.apiStatus.booking.lastChecked
+        };
+      } else {
+        results.booking = {
+          working: false,
+          error: 'Invalid or missing API key',
+          lastChecked: Date.now()
+        };
+      }
+    } catch (error: any) {
+      results.booking = {
+        working: false,
+        error: error.message,
+        lastChecked: Date.now()
+      };
+    }
+
+    console.log('📊 API Test Results:', results);
+    return results;
+  }
+
+  // Get API status summary
+  static getApiStatusSummary(): { total: number; working: number; failed: number; details: Record<string, boolean> } {
+    const details: Record<string, boolean> = {};
+    let working = 0;
+    let failed = 0;
+
+    Object.entries(this.apiStatus).forEach(([api, status]) => {
+      details[api] = status.working;
+      if (status.working) {
+        working++;
+      } else {
+        failed++;
+      }
+    });
+
+    return {
+      total: Object.keys(this.apiStatus).length,
+      working,
+      failed,
+      details
+    };
+  }
+
+  // Reset API status cache (useful for debugging)
+  static resetApiStatusCache(): void {
+    Object.keys(this.apiStatus).forEach(api => {
+      this.apiStatus[api as keyof typeof this.apiStatus] = {
+        working: false,
+        lastChecked: 0
+      };
+    });
+    console.log('🔄 API status cache reset');
   }
 }

@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { TravelApiService, HotelData, TempleData, TransportData, AttractionData } from '@/services/travelApiService';
+import ApiTester from './ApiTester';
 
 interface TripResultsProps {
   formData: {
@@ -255,7 +256,7 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="transport">Transport</TabsTrigger>
             <TabsTrigger value="hotels">Hotels</TabsTrigger>
@@ -263,6 +264,7 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
             <TabsTrigger value="attractions">Attractions</TabsTrigger>
             <TabsTrigger value="ai-insights">🤖 AI Insights</TabsTrigger>
             <TabsTrigger value="custom">🎯 Custom Data</TabsTrigger>
+            <TabsTrigger value="debug">🔧 Debug</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -934,6 +936,95 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
                   <p><strong>💾 Local Storage:</strong> Custom data is saved locally in your browser</p>
                   <p><strong>🎨 Personalization:</strong> Add temples, hotels, or trains specific to your preferences</p>
                   <p><strong>📱 Cross-Session:</strong> Your custom data persists across browser sessions</p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Debug Tab */}
+          <TabsContent value="debug" className="space-y-6">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-sacred-gradient mb-2">🔧 API Debug & Diagnostics</h2>
+              <p className="text-muted-foreground">Monitor API connectivity and troubleshoot issues</p>
+            </div>
+
+            <ApiTester />
+
+            {/* API Status Summary */}
+            <Card className="container-peaceful">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="text-2xl">📊</span>
+                  Current API Status
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center p-3 bg-blue-50 rounded-lg">
+                    <div className="text-lg font-bold text-blue-600">
+                      {TravelApiService.getApiStatusSummary().working}
+                    </div>
+                    <div className="text-sm text-blue-700">Working APIs</div>
+                  </div>
+                  <div className="text-center p-3 bg-red-50 rounded-lg">
+                    <div className="text-lg font-bold text-red-600">
+                      {TravelApiService.getApiStatusSummary().failed}
+                    </div>
+                    <div className="text-sm text-red-700">Failed APIs</div>
+                  </div>
+                  <div className="text-center p-3 bg-gray-50 rounded-lg">
+                    <div className="text-lg font-bold text-gray-600">
+                      {TravelApiService.getApiStatusSummary().total}
+                    </div>
+                    <div className="text-sm text-gray-700">Total APIs</div>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 rounded-lg">
+                    <div className="text-lg font-bold text-green-600">
+                      {Math.round((TravelApiService.getApiStatusSummary().working / TravelApiService.getApiStatusSummary().total) * 100)}%
+                    </div>
+                    <div className="text-sm text-green-700">Success Rate</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Troubleshooting Tips */}
+            <Card className="container-peaceful">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="text-2xl">💡</span>
+                  Troubleshooting Tips
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3 text-sm">
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <strong className="text-yellow-800">Slow Search Results:</strong>
+                    <p className="text-yellow-700 mt-1">
+                      If searches are slow, check the API status above. Failed APIs are automatically skipped for 1 hour to improve performance.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <strong className="text-blue-800">Wrong/Same Results:</strong>
+                    <p className="text-blue-700 mt-1">
+                      If you see the same results for different destinations, it means APIs are failing and falling back to mock data. Check API keys in .env file.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <strong className="text-green-800">API Key Issues:</strong>
+                    <p className="text-green-700 mt-1">
+                      Make sure your API keys are valid and not expired. Some APIs have rate limits or require specific formats.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                    <strong className="text-purple-800">Debug Information:</strong>
+                    <p className="text-purple-700 mt-1">
+                      Open browser console (F12) to see detailed API logs and error messages for troubleshooting.
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
