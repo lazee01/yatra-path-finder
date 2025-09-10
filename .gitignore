@@ -13,8 +13,9 @@ dist-ssr
 *.local
 
 # Environment variables
-.env
-.env.local
+# NOTE: .env is intentionally NOT ignored to allow Vercel deployment
+# WARNING: This exposes API keys to the repository - use with caution!
+# .env.local
 .env.development.local
 .env.test.local
 .env.production.local
