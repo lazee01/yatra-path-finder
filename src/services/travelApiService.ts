@@ -1,7 +1,66 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { toast } from '@/components/ui/use-toast';
+import { AuthService } from './authService';
+import { DatabaseService } from './databaseService';
+import { StorageService } from './storageService';
 
 // Types for API responses
+interface OpenTripMapPlace {
+  xid: string;
+  name: string;
+  kinds: string;
+  point: { lat: number; lon: number };
+  preview?: { source: string };
+  wikipedia_extracts?: { text: string };
+}
+
+interface BookingHotel {
+  hotel_name?: string;
+  name?: string;
+  review_score?: string;
+  price_breakdown?: { all_inclusive_price: number };
+  city?: string;
+  facilities?: string[];
+  max_photo_url?: string;
+  is_free_cancellable?: boolean;
+  hotel_id?: string;
+}
+
+interface AmadeusFlight {
+  id: string;
+  validatingAirlineCodes: string[];
+  price: { total: number; currency: string };
+  itineraries: Array<{
+    duration: string;
+    segments: Array<{
+      departure: { iataCode: string; terminal?: string; at: string };
+      arrival: { iataCode: string; terminal?: string; at: string };
+      carrierCode: string;
+      number: string;
+      aircraft?: { code: string };
+      duration: string;
+    }>;
+  }>;
+}
+
+interface IndianRailFare {
+  Name: string;
+  Code: string;
+  Fare: string;
+}
+
+interface IndianRailTrain {
+  train_number?: string;
+  train_name?: string;
+  number?: string;
+  name?: string;
+  departure_time?: string;
+  arrival_time?: string;
+  departure?: string;
+  arrival?: string;
+  duration?: string;
+  fares?: IndianRailFare[];
+}
 export interface HotelData {
   name: string;
   rating: number;
@@ -50,15 +109,26 @@ export class TravelApiService {
 
   // ===== CUSTOM DATA MANAGEMENT =====
 
-  // Custom data storage (in production, this would be a database)
+  // Custom data storage (fallback for non-authenticated users)
   private static customData = {
-    destinations: [] as any[],
+    destinations: [] as string[],
     temples: [] as TempleData[],
     hotels: [] as HotelData[],
     trains: [] as TransportData[],
     attractions: [] as AttractionData[],
-    userPreferences: {} as Record<string, any>
+    userPreferences: {} as Record<string, unknown>
   };
+
+  // Helper method to get current user ID
+  private static getCurrentUserId(): string | null {
+    const user = AuthService.getCurrentUser();
+    return user ? user.uid : null;
+  }
+
+  // Helper method to check if user is authenticated
+  private static isAuthenticated(): boolean {
+    return this.getCurrentUserId() !== null;
+  }
 
   // Load custom data from localStorage
   private static loadCustomData() {
@@ -84,13 +154,26 @@ export class TravelApiService {
   // ===== CUSTOM DATA MANAGEMENT METHODS =====
 
   // Add custom temple
-  static addCustomTemple(temple: Omit<TempleData, 'coordinates'> & { coordinates?: { lat: number; lng: number } }) {
-    this.loadCustomData();
+  static async addCustomTemple(temple: Omit<TempleData, 'coordinates'> & { coordinates?: { lat: number; lng: number } }) {
     const newTemple: TempleData = {
       ...temple,
       coordinates: temple.coordinates || { lat: 25.3176, lng: 82.9739 }, // Default coordinates
       imageUrl: temple.imageUrl || `/api/placeholder/300/200?temple=${Date.now()}`
     };
+
+    if (this.isAuthenticated()) {
+      const userId = this.getCurrentUserId()!;
+      const result = await DatabaseService.saveCustomTemple(userId, newTemple);
+      if (result.success) {
+        return newTemple;
+      } else {
+        console.error('Failed to save temple to Firebase:', result.error);
+        // Fallback to localStorage
+      }
+    }
+
+    // Fallback to localStorage
+    this.loadCustomData();
     this.customData.temples.push(newTemple);
     this.saveCustomData();
     return newTemple;
@@ -129,7 +212,34 @@ export class TravelApiService {
   }
 
   // Get all custom data
-  static getCustomData() {
+  static async getCustomData() {
+    if (this.isAuthenticated()) {
+      const userId = this.getCurrentUserId()!;
+
+      try {
+        const [templesResult, hotelsResult, transportResult, attractionsResult, preferencesResult] = await Promise.all([
+          DatabaseService.getCustomTemples(userId),
+          DatabaseService.getCustomHotels(userId),
+          DatabaseService.getCustomTransport(userId),
+          DatabaseService.getCustomAttractions(userId),
+          DatabaseService.getUserPreferences(userId)
+        ]);
+
+        return {
+          destinations: [],
+          temples: templesResult.success ? templesResult.data : [],
+          hotels: hotelsResult.success ? hotelsResult.data : [],
+          trains: transportResult.success ? transportResult.data : [],
+          attractions: attractionsResult.success ? attractionsResult.data : [],
+          userPreferences: preferencesResult.success ? preferencesResult.data : {}
+        };
+      } catch (error) {
+        console.error('Error fetching data from Firebase:', error);
+        // Fallback to localStorage
+      }
+    }
+
+    // Fallback to localStorage
     this.loadCustomData();
     return this.customData;
   }
@@ -146,7 +256,7 @@ export class TravelApiService {
   }
 
   // Update custom item
-  static updateCustomItem(type: 'temples' | 'hotels' | 'trains' | 'attractions', index: number, updates: any) {
+  static updateCustomItem(type: 'temples' | 'hotels' | 'trains' | 'attractions', index: number, updates: Record<string, unknown>) {
     this.loadCustomData();
     if (this.customData[type] && this.customData[type][index]) {
       this.customData[type][index] = { ...this.customData[type][index], ...updates };
@@ -157,37 +267,109 @@ export class TravelApiService {
   }
 
   // Set user preferences
-  static setUserPreferences(preferences: Record<string, any>) {
+  static async setUserPreferences(preferences: Record<string, unknown>) {
+    if (this.isAuthenticated()) {
+      const userId = this.getCurrentUserId()!;
+      const result = await DatabaseService.saveUserPreferences(userId, preferences);
+      if (result.success) {
+        return;
+      } else {
+        console.error('Failed to save preferences to Firebase:', result.error);
+        // Fallback to localStorage
+      }
+    }
+
+    // Fallback to localStorage
     this.loadCustomData();
     this.customData.userPreferences = { ...this.customData.userPreferences, ...preferences };
     this.saveCustomData();
   }
 
   // Get user preferences
-  static getUserPreferences() {
+  static async getUserPreferences() {
+    if (this.isAuthenticated()) {
+      const userId = this.getCurrentUserId()!;
+      const result = await DatabaseService.getUserPreferences(userId);
+      if (result.success) {
+        return result.data;
+      } else {
+        console.error('Failed to get preferences from Firebase:', result.error);
+        // Fallback to localStorage
+      }
+    }
+
+    // Fallback to localStorage
     this.loadCustomData();
     return this.customData.userPreferences;
   }
 
-  // API keys
+  // API keys with validation
   private static API_KEYS = {
-    opentripmap: import.meta.env.VITE_OPENTRIPMAP_API_KEY || 'YOUR_OPENTRIPMAP_KEY',
-    opencage: import.meta.env.VITE_OPENCAGE_API_KEY || 'YOUR_OPENCAGE_KEY', 
-    openweather: import.meta.env.VITE_OPENWEATHER_API_KEY || 'YOUR_OPENWEATHER_KEY',
-    gemini: 'AIzaSyBTun7wQQLD0Dnq7V8mKPg1BcFkd3n4pbs',
+    opentripmap: import.meta.env.VITE_OPENTRIPMAP_API_KEY || '',
+    opencage: import.meta.env.VITE_OPENCAGE_API_KEY || '',
+    openweather: import.meta.env.VITE_OPENWEATHER_API_KEY || '',
+    gemini: import.meta.env.VITE_GEMINI_API_KEY || '',
     indianRail: {
-      apiKey: '8762cddac5mshc01ca9fafddeb74p1fed3djsnd12f0ba62d78',
-      host: 'indian-railway-irctc.p.rapidapi.com'
+      apiKey: import.meta.env.VITE_INDIAN_RAIL_API_KEY || '',
+      host: import.meta.env.VITE_INDIAN_RAIL_API_HOST || 'indian-railway-irctc.p.rapidapi.com'
     },
     amadeus: {
-      apiKey: 'ZJYMuk03HtvOZcyd99nABmF0lCEosGHA',
-      apiSecret: 'xLfl6iYI5S8CtYCz'
+      apiKey: import.meta.env.VITE_AMADEUS_API_KEY || '',
+      apiSecret: import.meta.env.VITE_AMADEUS_API_SECRET || ''
     },
     booking: {
-      apiKey: '8762cddac5mshc01ca9fafddeb74p1fed3djsnd12f0ba62d78',
-      host: 'booking-com15.p.rapidapi.com'
+      apiKey: import.meta.env.VITE_BOOKING_API_KEY || '',
+      host: import.meta.env.VITE_BOOKING_API_HOST || 'booking-com15.p.rapidapi.com'
     },
   };
+
+  // API validation and status tracking
+  private static apiStatus = {
+    opentripmap: { working: false, lastChecked: 0 },
+    opencage: { working: false, lastChecked: 0 },
+    openweather: { working: false, lastChecked: 0 },
+    gemini: { working: false, lastChecked: 0 },
+    indianRail: { working: false, lastChecked: 0 },
+    amadeus: { working: false, lastChecked: 0 },
+    booking: { working: false, lastChecked: 0 }
+  };
+
+  // Check if API key is valid (not empty, not demo, not placeholder)
+  private static isValidApiKey(apiKey: string): boolean {
+    if (!apiKey || apiKey.trim() === '') return false;
+    if (apiKey.toLowerCase().includes('demo')) return false;
+    if (apiKey.toLowerCase().includes('your_')) return false;
+    if (apiKey.toLowerCase().includes('placeholder')) return false;
+    if (apiKey.length < 10) return false; // Most API keys are longer than 10 chars
+    return true;
+  }
+
+  // Test API connectivity
+  private static async testApiConnectivity(apiName: string, testUrl: string, headers?: Record<string, string>): Promise<boolean> {
+    try {
+      const response = await fetch(testUrl, {
+        method: 'GET',
+        headers: headers || {},
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      });
+
+      const isWorking = response.ok || response.status === 401; // 401 means API key issues, but API is reachable
+      this.apiStatus[apiName as keyof typeof this.apiStatus] = {
+        working: isWorking,
+        lastChecked: Date.now()
+      };
+
+      console.log(`${apiName} API test: ${isWorking ? '✅ Working' : '❌ Failed'} (${response.status})`);
+      return isWorking;
+    } catch (error) {
+      console.warn(`${apiName} API test failed:`, error);
+      this.apiStatus[apiName as keyof typeof this.apiStatus] = {
+        working: false,
+        lastChecked: Date.now()
+      };
+      return false;
+    }
+  }
 
   // AI Models Configuration
   private static genAI = new GoogleGenerativeAI(this.API_KEYS.gemini);
@@ -203,141 +385,185 @@ export class TravelApiService {
   // Amadeus access token storage
   private static amadeusToken: { token: string; expires: number } | null = null;
 
-  // Get coordinates for a destination
+  // Get coordinates for a destination with improved error handling
   static async getCoordinates(destination: string): Promise<{ lat: number; lng: number } | null> {
     try {
-      const apiKey = this.API_KEYS.opencage;
-      
-      // If no API key configured, use predefined coordinates for common destinations
-      if (!apiKey || apiKey === 'YOUR_OPENCAGE_KEY') {
-        console.warn('OpenCage API key not configured, using predefined coordinates');
-        return this.getPredefinedCoordinates(destination);
+      // Validate destination input
+      const validation = this.validateDestination(destination);
+      if (!validation.isValid) {
+        console.warn('Invalid destination:', validation.error);
+        return this.getMockCoordinates(destination);
       }
 
-      const response = await fetch(
-        `${this.BASE_URLS.geocoding}?q=${encodeURIComponent(destination)}&key=${apiKey}&limit=1`
-      );
-      
-      if (!response.ok) {
-        console.warn(`OpenCage API failed with status ${response.status}, using predefined coordinates`);
-        return this.getPredefinedCoordinates(destination);
+      const cleanDestination = validation.sanitized;
+
+      // Check if OpenCage API key is valid
+      if (!this.isValidApiKey(this.API_KEYS.opencage)) {
+        console.warn('OpenCage API key not configured or invalid, using mock coordinates');
+        return this.getMockCoordinates(cleanDestination);
       }
-      
+
+      // Test API connectivity if not recently checked
+      const lastChecked = this.apiStatus.opencage.lastChecked;
+      if (Date.now() - lastChecked > 300000) { // Check every 5 minutes
+        const testUrl = `${this.BASE_URLS.geocoding}?q=test&key=${this.API_KEYS.opencage}&limit=1`;
+        await this.testApiConnectivity('opencage', testUrl);
+      }
+
+      // Skip API call if we know it's not working
+      if (!this.apiStatus.opencage.working && Date.now() - lastChecked < 3600000) { // Within last hour
+        console.warn('OpenCage API previously failed, using mock coordinates');
+        return this.getMockCoordinates(cleanDestination);
+      }
+
+      console.log(`🔍 Fetching coordinates for: ${cleanDestination}`);
+
+      const response = await fetch(
+        `${this.BASE_URLS.geocoding}?q=${encodeURIComponent(cleanDestination)}&key=${this.API_KEYS.opencage}&limit=1`,
+        {
+          signal: AbortSignal.timeout(10000) // 10 second timeout
+        }
+      );
+
+      if (!response.ok) {
+        console.warn(`OpenCage API error: ${response.status} ${response.statusText}`);
+        return this.getMockCoordinates(cleanDestination);
+      }
+
       const data = await response.json();
-      
+
       if (data.results && data.results.length > 0) {
         const result = data.results[0];
-        return {
+        const coordinates = {
           lat: result.geometry.lat,
           lng: result.geometry.lng
         };
+
+        console.log(`✅ Found coordinates for ${cleanDestination}:`, coordinates);
+        return coordinates;
       }
-      
-      // Fallback to predefined coordinates if API returns no results
-      return this.getPredefinedCoordinates(destination);
+
+      console.warn(`No coordinates found for ${cleanDestination}, using mock data`);
+      return this.getMockCoordinates(cleanDestination);
+
     } catch (error) {
       console.error('Error fetching coordinates:', error);
-      return this.getPredefinedCoordinates(destination);
+      return this.getMockCoordinates(destination);
     }
   }
 
-  // Predefined coordinates for common spiritual destinations in India
-  private static getPredefinedCoordinates(destination: string): { lat: number; lng: number } | null {
-    const coords = {
-      varanasi: { lat: 25.3176, lng: 82.9739 },
-      tirupati: { lat: 13.6288, lng: 79.4192 },
-      rishikesh: { lat: 30.0869, lng: 78.2676 },
-      haridwar: { lat: 29.9457, lng: 78.1642 },
-      kedarnath: { lat: 30.7346, lng: 79.0669 },
-      badrinath: { lat: 30.7433, lng: 79.4938 },
-      amritsar: { lat: 31.6340, lng: 74.8723 },
-      'golden temple': { lat: 31.6200, lng: 74.8765 },
-      mysore: { lat: 12.2958, lng: 76.6394 },
-      hampi: { lat: 15.3350, lng: 76.4600 },
-      goa: { lat: 15.2993, lng: 74.1240 },
-      kerala: { lat: 10.8505, lng: 76.2711 },
-      kanyakumari: { lat: 8.0883, lng: 77.5385 },
-      madurai: { lat: 9.9252, lng: 78.1198 },
-      thanjavur: { lat: 10.7870, lng: 79.1378 },
-      puri: { lat: 19.8135, lng: 85.8312 },
-      konark: { lat: 19.8877, lng: 86.0945 },
-      ajmer: { lat: 26.4499, lng: 74.6399 },
-      pushkar: { lat: 26.4897, lng: 74.5511 },
-      udaipur: { lat: 24.5854, lng: 73.7125 },
-      jaipur: { lat: 26.9124, lng: 75.7873 },
-      jodhpur: { lat: 26.2389, lng: 73.0243 },
-      jaisalmer: { lat: 26.9157, lng: 70.9083 },
-      bikaner: { lat: 28.0229, lng: 73.3119 },
+  // Mock coordinates for destinations when API is not available
+  private static getMockCoordinates(destination: string): { lat: number; lng: number } {
+    const coordinates: Record<string, { lat: number; lng: number }> = {
+      'varanasi': { lat: 25.3176, lng: 82.9739 },
+      'tirupati': { lat: 13.6288, lng: 79.4192 },
+      'rishikesh': { lat: 30.0869, lng: 78.2676 },
+      'haridwar': { lat: 29.9457, lng: 78.1642 },
+      'kedarnath': { lat: 30.7346, lng: 79.0669 },
+      'badrinath': { lat: 30.7433, lng: 79.4938 },
+      'amritsar': { lat: 31.6340, lng: 74.8723 },
+      'mysore': { lat: 12.2958, lng: 76.6394 },
+      'hampi': { lat: 15.3350, lng: 76.4600 },
+      'goa': { lat: 15.2993, lng: 74.1240 },
+      'kerala': { lat: 10.8505, lng: 76.2711 },
+      'kanyakumari': { lat: 8.0883, lng: 77.5385 },
+      'madurai': { lat: 9.9252, lng: 78.1198 },
+      'thanjavur': { lat: 10.7870, lng: 79.1378 },
+      'puri': { lat: 19.8135, lng: 85.8312 },
+      'konark': { lat: 19.8876, lng: 86.0945 },
+      'ajmer': { lat: 26.4499, lng: 74.6399 },
+      'pushkar': { lat: 26.4897, lng: 74.5511 },
+      'udaipur': { lat: 24.5854, lng: 73.7125 },
+      'jaipur': { lat: 26.9124, lng: 75.7873 },
+      'jodhpur': { lat: 26.2389, lng: 73.0243 },
+      'jaisalmer': { lat: 26.9157, lng: 70.9083 },
+      'bikaner': { lat: 28.0229, lng: 73.3119 },
       'mount abu': { lat: 24.5925, lng: 72.7156 },
-      chittorgarh: { lat: 24.8887, lng: 74.6269 },
-      mathura: { lat: 27.4924, lng: 77.6737 },
-      vrindavan: { lat: 27.5806, lng: 77.7064 },
-      ayodhya: { lat: 26.7922, lng: 82.1998 },
-      somnath: { lat: 20.8880, lng: 70.4017 },
-      dwarka: { lat: 22.2394, lng: 68.9678 },
-      rameswaram: { lat: 9.2881, lng: 79.3129 },
-      shirdi: { lat: 19.7645, lng: 74.4769 },
-      nashik: { lat: 19.9975, lng: 73.7898 },
-      pune: { lat: 18.5204, lng: 73.8567 },
-      mumbai: { lat: 19.0760, lng: 72.8777 },
-      delhi: { lat: 28.7041, lng: 77.1025 },
-      kolkata: { lat: 22.5726, lng: 88.3639 },
-      chennai: { lat: 13.0827, lng: 80.2707 },
-      bangalore: { lat: 12.9716, lng: 77.5946 },
-      hyderabad: { lat: 17.3850, lng: 78.4867 }
+      'chittorgarh': { lat: 24.8887, lng: 74.6269 }
     };
 
-    const dest = destination.toLowerCase().trim();
-    
-    // Try exact match first
-    if (coords[dest]) {
-      return coords[dest];
-    }
-    
-    // Try partial match
-    for (const [place, coord] of Object.entries(coords)) {
-      if (dest.includes(place) || place.includes(dest)) {
-        return coord;
-      }
-    }
-    
-    // Default to Varanasi coordinates if no match found
-    console.warn(`No coordinates found for ${destination}, using Varanasi as default`);
-    return coords.varanasi;
+    const normalizedDestination = destination.toLowerCase().trim();
+    return coordinates[normalizedDestination] || { lat: 20.5937, lng: 78.9629 }; // Default to India center
   }
 
-  // Get temples and spiritual places (with custom data support)
+  // Get temples and spiritual places with improved API handling
   static async getTemples(destination: string): Promise<TempleData[]> {
+    console.log(`🏛️ Fetching temples for: ${destination}`);
+
     try {
       // Load custom temples for this destination
-      this.loadCustomData();
-      const customTemples = this.customData.temples.filter(
-        temple => temple.location.toLowerCase().includes(destination.toLowerCase())
-      );
+      let customTemples: TempleData[] = [];
+
+      if (this.isAuthenticated()) {
+        const userId = this.getCurrentUserId()!;
+        const result = await DatabaseService.getCustomTemples(userId);
+        if (result.success) {
+          customTemples = result.data.filter(
+            temple => temple.location.toLowerCase().includes(destination.toLowerCase())
+          );
+          console.log(`📋 Found ${customTemples.length} custom temples`);
+        }
+      } else {
+        // Fallback to localStorage
+        this.loadCustomData();
+        customTemples = this.customData.temples.filter(
+          temple => temple.location.toLowerCase().includes(destination.toLowerCase())
+        );
+      }
 
       const coords = await this.getCoordinates(destination);
       if (!coords) {
-        // Return custom temples + mock temples if no coordinates
+        console.warn('No coordinates available, using mock temples');
         return [...customTemples, ...this.getMockTemples(destination)];
       }
 
-      // Using OpenTripMap API for places of worship
+      // Check if OpenTripMap API key is valid
+      if (!this.isValidApiKey(this.API_KEYS.opentripmap)) {
+        console.warn('OpenTripMap API key not configured or invalid, using mock temples');
+        return [...customTemples, ...this.getMockTemples(destination)];
+      }
+
+      // Test API connectivity if not recently checked
+      const lastChecked = this.apiStatus.opentripmap.lastChecked;
+      if (Date.now() - lastChecked > 300000) { // Check every 5 minutes
+        const testUrl = `${this.BASE_URLS.places}/radius?radius=1000&lon=0&lat=0&kinds=religion&format=json&apikey=${this.API_KEYS.opentripmap}`;
+        await this.testApiConnectivity('opentripmap', testUrl);
+      }
+
+      // Skip API call if we know it's not working
+      if (!this.apiStatus.opentripmap.working && Date.now() - lastChecked < 3600000) { // Within last hour
+        console.warn('OpenTripMap API previously failed, using mock temples');
+        return [...customTemples, ...this.getMockTemples(destination)];
+      }
+
+      console.log(`🔍 Searching for temples near ${destination} (${coords.lat}, ${coords.lng})`);
+
+      // Using OpenTripMap API for places of worship with timeout
       const response = await fetch(
-        `${this.BASE_URLS.places}/radius?radius=10000&lon=${coords.lng}&lat=${coords.lat}&kinds=religion&format=json&apikey=${this.API_KEYS.opentripmap}`
+        `${this.BASE_URLS.places}/radius?radius=15000&lon=${coords.lng}&lat=${coords.lat}&kinds=religion&format=json&apikey=${this.API_KEYS.opentripmap}`,
+        {
+          signal: AbortSignal.timeout(15000) // 15 second timeout
+        }
       );
 
       let apiTemples: TempleData[] = [];
       if (response.ok) {
         const places = await response.json();
-        apiTemples = places.slice(0, 5).map((place: any) => ({
+        console.log(`✅ OpenTripMap returned ${places.length} places`);
+
+        apiTemples = places.slice(0, 5).map((place: OpenTripMapPlace) => ({
           name: place.name || 'Sacred Temple',
           location: destination,
           pujaTimings: '5:00 AM - 12:00 PM, 4:00 PM - 9:00 PM',
-          description: 'Ancient temple with rich spiritual heritage',
-          imageUrl: place.preview?.source || '/api/placeholder/300/200',
+          description: place.wikipedia_extracts?.text || 'Ancient temple with rich spiritual heritage',
+          imageUrl: place.preview?.source || `/api/placeholder/300/200?temple=${Date.now()}`,
           onlineBooking: Math.random() > 0.5,
           coordinates: { lat: place.point.lat, lng: place.point.lon }
         }));
+
+        console.log(`✅ Processed ${apiTemples.length} temples from API`);
+      } else {
+        console.warn(`OpenTripMap API error: ${response.status} ${response.statusText}`);
       }
 
       // Combine custom temples, API temples, and mock temples
@@ -345,143 +571,214 @@ export class TravelApiService {
 
       // Remove duplicates based on name
       const uniqueTemples = allTemples.filter((temple, index, self) =>
-        index === self.findIndex(t => t.name === temple.name)
+        index === self.findIndex(t => t.name.toLowerCase() === temple.name.toLowerCase())
       );
 
-      return uniqueTemples.slice(0, 8); // Return up to 8 temples
+      const finalTemples = uniqueTemples.slice(0, 8);
+      console.log(`📋 Returning ${finalTemples.length} unique temples`);
+
+      return finalTemples;
+
     } catch (error) {
       console.error('Error fetching temples:', error);
+
       // Return custom temples + mock temples on error
-      this.loadCustomData();
-      const customTemples = this.customData.temples.filter(
-        temple => temple.location.toLowerCase().includes(destination.toLowerCase())
-      );
+      let customTemples: TempleData[] = [];
+
+      if (this.isAuthenticated()) {
+        const userId = this.getCurrentUserId()!;
+        const result = await DatabaseService.getCustomTemples(userId);
+        if (result.success) {
+          customTemples = result.data.filter(
+            temple => temple.location.toLowerCase().includes(destination.toLowerCase())
+          );
+        }
+      } else {
+        this.loadCustomData();
+        customTemples = this.customData.temples.filter(
+          temple => temple.location.toLowerCase().includes(destination.toLowerCase())
+        );
+      }
+
       return [...customTemples, ...this.getMockTemples(destination)];
     }
   }
 
 
-  // Mock data fallbacks when APIs are not available or fail
+  // Enhanced mock data with realistic variety for each destination
   private static getMockTemples(destination: string): TempleData[] {
-    const temples = {
+    const temples: Record<string, Array<{ name: string; pujaTimings: string; onlineBooking: boolean; description: string }>> = {
       varanasi: [
-        { name: 'Kashi Vishwanath Temple', pujaTimings: '4:00 AM - 11:00 PM', onlineBooking: true, description: 'One of the most sacred Shiva temples' },
-        { name: 'Sankat Mochan Hanuman Temple', pujaTimings: '5:00 AM - 10:00 PM', onlineBooking: false, description: 'Famous Hanuman temple founded by Tulsidas' },
-        { name: 'Durga Temple', pujaTimings: '6:00 AM - 12:00 PM, 4:00 PM - 9:00 PM', onlineBooking: true, description: 'Beautiful red temple dedicated to Goddess Durga' },
-        { name: 'Annapurna Temple', pujaTimings: '6:00 AM - 1:00 PM, 5:00 PM - 10:00 PM', onlineBooking: false, description: 'Dedicated to the goddess of food and nourishment' }
+        { name: 'Kashi Vishwanath Temple', pujaTimings: '4:00 AM - 11:00 PM', onlineBooking: true, description: 'One of the 12 Jyotirlingas, dedicated to Lord Shiva with golden dome' },
+        { name: 'Sankat Mochan Hanuman Temple', pujaTimings: '5:00 AM - 10:00 PM', onlineBooking: false, description: 'Famous temple known for removing obstacles, founded by Tulsidas' },
+        { name: 'Durga Temple', pujaTimings: '6:00 AM - 12:00 PM, 4:00 PM - 9:00 PM', onlineBooking: true, description: 'Ancient temple dedicated to Goddess Durga with rich history' },
+        { name: 'Tulsi Manas Temple', pujaTimings: '5:30 AM - 9:00 PM', onlineBooking: false, description: 'Temple dedicated to Lord Rama, built by Tulsidas himself' },
+        { name: 'Kal Bhairav Temple', pujaTimings: '6:00 AM - 10:00 PM', onlineBooking: false, description: 'Temple dedicated to Lord Bhairav, protector of Varanasi' },
+        { name: 'Annapurna Temple', pujaTimings: '7:00 AM - 12:00 PM, 4:00 PM - 8:00 PM', onlineBooking: true, description: 'Temple dedicated to Goddess Annapurna, provider of food' },
+        { name: 'Ram Nagar Fort Temple', pujaTimings: '8:00 AM - 6:00 PM', onlineBooking: false, description: 'Ancient fort with temple dedicated to Lord Rama' },
+        { name: 'Bindhyabasini Temple', pujaTimings: '5:00 AM - 9:00 PM', onlineBooking: true, description: 'Temple dedicated to Goddess Durga with scenic views' }
       ],
       tirupati: [
-        { name: 'Sri Venkateswara Temple', pujaTimings: '2:30 AM - 1:00 AM', onlineBooking: true, description: 'Most visited Hindu temple in the world' },
-        { name: 'Sri Kapileswara Swamy Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: false, description: 'Ancient Shiva temple with natural spring' },
-        { name: 'ISKCON Tirupati', pujaTimings: '4:30 AM - 1:00 PM, 4:00 PM - 8:30 PM', onlineBooking: true, description: 'Modern Krishna temple with spiritual programs' },
-        { name: 'Sri Padmavathi Ammavari Temple', pujaTimings: '5:30 AM - 12:30 PM, 3:00 PM - 9:00 PM', onlineBooking: true, description: 'Dedicated to Goddess Padmavathi, consort of Lord Venkateswara' }
+        { name: 'Sri Venkateswara Temple', pujaTimings: '2:30 AM - 1:00 AM', onlineBooking: true, description: 'World-famous temple, one of the richest temples in the world' },
+        { name: 'Sri Kapileswara Swamy Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: false, description: 'Ancient temple dedicated to Lord Shiva on the hill' },
+        { name: 'ISKCON Tirupati', pujaTimings: '4:30 AM - 1:00 PM, 4:00 PM - 8:30 PM', onlineBooking: true, description: 'Modern Krishna temple with daily spiritual programs' },
+        { name: 'Padmavathi Temple', pujaTimings: '5:00 AM - 9:00 PM', onlineBooking: true, description: 'Temple dedicated to Goddess Padmavathi, consort of Lord Venkateswara' },
+        { name: 'Govindaraja Swamy Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: false, description: 'Ancient temple with beautiful architecture and sculptures' },
+        { name: 'Kodandaramaswamy Temple', pujaTimings: '5:30 AM - 9:00 PM', onlineBooking: true, description: 'Temple dedicated to Lord Rama with family' }
       ],
       rishikesh: [
-        { name: 'Triveni Ghat', pujaTimings: '5:00 AM - 9:00 PM', onlineBooking: false, description: 'Sacred bathing ghat where three rivers meet' },
-        { name: 'Neelkanth Mahadev Temple', pujaTimings: '6:00 AM - 6:00 PM', onlineBooking: false, description: 'Temple where Lord Shiva drank poison' },
-        { name: 'Bharat Mandir', pujaTimings: '6:00 AM - 12:00 PM, 4:00 PM - 8:00 PM', onlineBooking: false, description: 'Oldest temple in Rishikesh dedicated to Lord Vishnu' },
-        { name: 'Parmarth Niketan', pujaTimings: '5:00 AM - 10:00 PM', onlineBooking: true, description: 'Spiritual ashram with Ganga Aarti ceremonies' }
-      ],
-      amritsar: [
-        { name: 'Golden Temple (Harmandir Sahib)', pujaTimings: '24 Hours Open', onlineBooking: false, description: 'Most sacred Sikh temple covered in gold' },
-        { name: 'Durgiana Temple', pujaTimings: '6:00 AM - 10:00 PM', onlineBooking: false, description: 'Hindu temple replica of Golden Temple' },
-        { name: 'Ram Tirath Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: false, description: 'Ancient temple associated with Ramayana' },
-        { name: 'Gurudwara Baba Atal', pujaTimings: '24 Hours Open', onlineBooking: false, description: 'Nine-story octagonal tower and gurudwara' }
+        { name: 'Triveni Ghat Temple', pujaTimings: '5:00 AM - 10:00 PM', onlineBooking: false, description: 'Sacred confluence of Ganges, Yamuna and Saraswati rivers' },
+        { name: 'Kedar Nath Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: false, description: 'Ancient temple dedicated to Lord Shiva in the mountains' },
+        { name: 'Ramana\'s Garden Cafe Temple', pujaTimings: '7:00 AM - 7:00 PM', onlineBooking: false, description: 'Peaceful meditation center with yoga and spiritual activities' },
+        { name: 'Neer Garh Waterfall Temple', pujaTimings: '8:00 AM - 6:00 PM', onlineBooking: false, description: 'Natural waterfall with spiritual ambiance' },
+        { name: 'Parmarth Niketan Ashram', pujaTimings: '5:00 AM - 9:00 PM', onlineBooking: true, description: 'Spiritual retreat center with daily prayers and meditation' },
+        { name: 'Chotiwala Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: false, description: 'Ancient temple with traditional Garhwali architecture' }
       ],
       haridwar: [
-        { name: 'Har Ki Pauri', pujaTimings: '5:00 AM - 10:00 PM', onlineBooking: false, description: 'Most sacred ghat on the Ganges in Haridwar' },
-        { name: 'Chandi Devi Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: true, description: 'Temple on Neel Parvat accessible by cable car' },
-        { name: 'Mansa Devi Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: true, description: 'Temple dedicated to wish-fulfilling goddess' },
-        { name: 'Maya Devi Temple', pujaTimings: '6:00 AM - 12:00 PM, 4:00 PM - 9:00 PM', onlineBooking: false, description: 'One of the Shakti Peethas, birthplace of Goddess Sati' }
+        { name: 'Har Ki Pauri', pujaTimings: '24 Hours', onlineBooking: false, description: 'Most sacred bathing ghat, site of famous Ganga Aarti ceremony' },
+        { name: 'Chandi Devi Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: false, description: 'Temple dedicated to Goddess Chandi on Chandikund hill' },
+        { name: 'Maya Devi Temple', pujaTimings: '5:30 AM - 9:00 PM', onlineBooking: false, description: 'Ancient temple with rich mythology and history' },
+        { name: 'Mansa Devi Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: true, description: 'Temple dedicated to Goddess Mansa Devi with cable car access' },
+        { name: 'Bharat Mata Temple', pujaTimings: '7:00 AM - 7:00 PM', onlineBooking: false, description: 'Unique temple with relief map of India carved in marble' },
+        { name: 'Sapt Rishi Ashram', pujaTimings: '5:00 AM - 9:00 PM', onlineBooking: false, description: 'Ancient ashram associated with seven sages' }
+      ],
+      amritsar: [
+        { name: 'Golden Temple', pujaTimings: '24 Hours', onlineBooking: false, description: 'The holiest Sikh shrine, Harmandir Sahib with golden dome' },
+        { name: 'Durgiana Temple', pujaTimings: '5:00 AM - 10:00 PM', onlineBooking: false, description: 'Beautiful Hindu temple with golden dome and lake' },
+        { name: 'Jallianwala Bagh Memorial', pujaTimings: '9:00 AM - 5:00 PM', onlineBooking: false, description: 'Historical site commemorating Jallianwala Bagh massacre' },
+        { name: 'Akal Takht', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: false, description: 'Supreme Sikh authority seat, part of Golden Temple complex' },
+        { name: 'Ram Bagh Gardens', pujaTimings: '8:00 AM - 6:00 PM', onlineBooking: false, description: 'Historic Mughal gardens with fountains and pavilions' },
+        { name: 'Partition Museum', pujaTimings: '10:00 AM - 5:00 PM', onlineBooking: true, description: 'Museum documenting the 1947 partition of India' }
+      ],
+      mysore: [
+        { name: 'Chamundeshwari Temple', pujaTimings: '7:30 AM - 2:00 PM, 3:30 PM - 8:00 PM', onlineBooking: false, description: 'Temple dedicated to Goddess Chamundi on Chamundi Hill' },
+        { name: 'Lalitha Mahal Palace Temple', pujaTimings: '9:00 AM - 5:00 PM', onlineBooking: false, description: 'Historic palace with Italian architecture and spiritual ambiance' },
+        { name: 'St. Philomena\'s Church', pujaTimings: '6:00 AM - 6:00 PM', onlineBooking: false, description: 'Neo-Gothic church with stunning stained glass windows' },
+        { name: 'Someshwara Temple', pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: false, description: 'Ancient temple dedicated to Lord Shiva with Hoysala architecture' },
+        { name: 'Ganesha Temple', pujaTimings: '6:00 AM - 9:00 PM', onlineBooking: true, description: 'Temple dedicated to Lord Ganesha with beautiful sculptures' },
+        { name: 'Bull Temple', pujaTimings: '7:00 AM - 7:00 PM', onlineBooking: false, description: 'Famous temple with massive monolithic Nandi bull statue' }
       ]
     };
 
-    const dest = destination.toLowerCase().trim();
-    let templeList = temples[dest];
-    
-    // If no specific temples found, create destination-specific default temples
-    if (!templeList) {
-      templeList = [
-        { name: `${destination} Main Temple`, pujaTimings: '5:00 AM - 12:00 PM, 4:00 PM - 9:00 PM', onlineBooking: true, description: `Primary spiritual center of ${destination}` },
-        { name: `${destination} Ancient Temple`, pujaTimings: '6:00 AM - 11:00 PM', onlineBooking: false, description: `Historic temple with centuries of heritage in ${destination}` },
-        { name: `${destination} Sacred Shrine`, pujaTimings: '4:00 AM - 10:00 PM', onlineBooking: true, description: `Peaceful shrine for meditation and prayers in ${destination}` },
-        { name: `${destination} Heritage Temple`, pujaTimings: '6:00 AM - 8:00 PM', onlineBooking: false, description: `Traditional temple showcasing local architectural style` }
-      ];
+    const normalizedDestination = destination.toLowerCase().trim();
+    const templeList = temples[normalizedDestination];
+
+    if (templeList) {
+      // Return 4-6 random temples to add variety
+      const shuffled = [...templeList].sort(() => 0.5 - Math.random());
+      const selectedTemples = shuffled.slice(0, Math.floor(Math.random() * 3) + 4); // 4-6 temples
+
+      return selectedTemples.map((temple, index) => ({
+        ...temple,
+        location: destination,
+        imageUrl: `/api/placeholder/300/200?temple=${normalizedDestination}_${index}_${Date.now()}`,
+        coordinates: this.getMockCoordinates(destination)
+      }));
     }
-    
-    return templeList.map((temple, index) => ({
+
+    // Enhanced default temples for unknown destinations
+    const defaultTemples = [
+      { name: `${destination} Main Temple`, pujaTimings: '5:00 AM - 12:00 PM, 4:00 PM - 9:00 PM', onlineBooking: true, description: `Primary spiritual center of ${destination} with rich history` },
+      { name: `${destination} Ancient Shrine`, pujaTimings: '6:00 AM - 11:00 PM', onlineBooking: false, description: `Historic temple showcasing ${destination}'s cultural heritage` },
+      { name: `${destination} Sacred Temple`, pujaTimings: '4:00 AM - 10:00 PM', onlineBooking: true, description: `Popular pilgrimage site in ${destination} with divine atmosphere` },
+      { name: `${destination} Spiritual Center`, pujaTimings: '5:30 AM - 8:30 PM', onlineBooking: false, description: `Meditation and prayer center in ${destination}` },
+      { name: `${destination} Heritage Temple`, pujaTimings: '6:00 AM - 9:00 PM', onlineBooking: true, description: `Architecturally significant temple in ${destination}` },
+      { name: `${destination} Peace Temple`, pujaTimings: '7:00 AM - 7:00 PM', onlineBooking: false, description: `Tranquil temple offering spiritual peace in ${destination}` }
+    ];
+
+    // Return random selection of default temples
+    const shuffled = [...defaultTemples].sort(() => 0.5 - Math.random());
+    const selectedTemples = shuffled.slice(0, Math.floor(Math.random() * 2) + 4); // 4-5 temples
+
+    return selectedTemples.map((temple, index) => ({
       ...temple,
       location: destination,
-      description: 'Sacred temple with rich spiritual heritage and divine atmosphere',
-      imageUrl: `/api/placeholder/300/200?temple=${index}`,
-      coordinates: { lat: 25.3176 + Math.random() * 0.1, lng: 82.9739 + Math.random() * 0.1 }
+      imageUrl: `/api/placeholder/300/200?temple=${normalizedDestination}_${index}_${Date.now()}`,
+      coordinates: this.getMockCoordinates(destination)
     }));
   }
 
   private static getMockAttractions(destination: string): AttractionData[] {
-    const locationAttractions: { [key: string]: Array<{name: string, type: string, description: string}> } = {
+    const attractions: Record<string, Array<{ name: string; type: string; description: string }>> = {
       varanasi: [
-        { name: 'Dashashwamedh Ghat', type: 'Spiritual', description: 'Main ghat famous for evening Ganga Aarti ceremony' },
-        { name: 'Sarnath Archaeological Site', type: 'Heritage', description: 'Where Buddha gave his first sermon after enlightenment' },
-        { name: 'Ramnagar Fort', type: 'Heritage', description: '18th-century fort with vintage car collection and museum' },
-        { name: 'Banaras Hindu University', type: 'Cultural', description: 'One of Asia\'s largest residential universities with beautiful campus' },
-        { name: 'Manikarnika Ghat', type: 'Spiritual', description: 'Most sacred cremation ghat for Hindus' },
-        { name: 'Assi Ghat', type: 'Cultural', description: 'Popular ghat for spiritual seekers and cultural activities' }
+        { name: 'Ganga Aarti at Dashashwamedh Ghat', type: 'Spiritual', description: 'Spectacular evening prayer ceremony with lamps on the Ganges River' },
+        { name: 'Sarnath Archaeological Museum', type: 'Heritage', description: 'Ancient Buddhist site where Buddha gave his first sermon, UNESCO site' },
+        { name: 'Banaras Hindu University Campus', type: 'Cultural', description: 'Largest residential university in Asia with beautiful colonial architecture' },
+        { name: 'Ramanagar Fort & Museum', type: 'Heritage', description: '18th-century fort with panoramic Ganges view and royal artifacts' },
+        { name: 'Tulsi Manas Temple Complex', type: 'Spiritual', description: 'Temple dedicated to the author of Ramcharitmanas with beautiful gardens' },
+        { name: 'Assi Ghat Cultural Center', type: 'Cultural', description: 'Popular ghat for boat rides, music performances and cultural activities' },
+        { name: 'Dhamek Stupa', type: 'Heritage', description: 'Massive stupa marking the spot of Buddha\'s first teaching' },
+        { name: 'Alamgir Mosque', type: 'Heritage', description: '17th-century mosque with stunning Mughal architecture' }
       ],
       tirupati: [
-        { name: 'Tirumala Hills', type: 'Natural', description: 'Sacred hills housing the famous Venkateswara Temple' },
-        { name: 'Sri Vari Museum', type: 'Cultural', description: 'Museum showcasing temple artifacts and history' },
-        { name: 'Akasaganga Theertham', type: 'Natural', description: 'Sacred waterfall believed to have healing properties' },
-        { name: 'Sila Thoranam', type: 'Natural', description: 'Natural rock formation mentioned in ancient scriptures' },
-        { name: 'TTD Gardens', type: 'Natural', description: 'Beautiful botanical gardens with rare plants and flowers' },
-        { name: 'Regional Science Centre', type: 'Cultural', description: 'Interactive science museum for families' }
+        { name: 'Tirumala Hills', type: 'Natural', description: 'Sacred hills surrounding the temple with scenic views' },
+        { name: 'Sri Padmavati Temple', type: 'Spiritual', description: 'Temple dedicated to Goddess Padmavathi' },
+        { name: 'Talakona Waterfall', type: 'Natural', description: 'Beautiful waterfall in the nearby forest area' },
+        { name: 'Sri Venkateswara National Park', type: 'Natural', description: 'Wildlife sanctuary with diverse flora and fauna' },
+        { name: 'Kapila Theertham', type: 'Spiritual', description: 'Sacred water body associated with Hindu mythology' },
+        { name: 'TTD Gardens', type: 'Cultural', description: 'Beautiful gardens maintained by temple trust' }
       ],
       rishikesh: [
-        { name: 'Laxman Jhula', type: 'Heritage', description: 'Iconic suspension bridge across the Ganges' },
-        { name: 'Beatles Ashram', type: 'Cultural', description: 'Former ashram where The Beatles stayed and meditated' },
-        { name: 'River Rafting', type: 'Natural', description: 'Thrilling white water rafting on the Ganges' },
-        { name: 'Ram Jhula', type: 'Heritage', description: 'Another famous suspension bridge with spiritual significance' },
-        { name: 'Rajaji National Park', type: 'Natural', description: 'Wildlife sanctuary with elephants, tigers, and diverse flora' },
-        { name: 'Yoga Ashrams', type: 'Spiritual', description: 'World-renowned yoga and meditation centers' }
+        { name: 'Triveni Ghat', type: 'Spiritual', description: 'Sacred confluence of Ganges, Yamuna and Saraswati rivers' },
+        { name: 'Beatles Ashram', type: 'Cultural', description: 'Historic ashram where The Beatles stayed in 1968' },
+        { name: 'Neer Garh Waterfall', type: 'Natural', description: 'Beautiful waterfall surrounded by lush greenery' },
+        { name: 'Parmarth Niketan', type: 'Spiritual', description: 'Spiritual retreat center with yoga and meditation' },
+        { name: 'Ramana\'s Garden Cafe', type: 'Cultural', description: 'Peaceful cafe with spiritual ambiance' },
+        { name: 'Chotiwala', type: 'Cultural', description: 'Ancient village with traditional Garhwali culture' }
+      ],
+      haridwar: [
+        { name: 'Har Ki Pauri', type: 'Spiritual', description: 'Most sacred ghat for ritual bathing in Ganges' },
+        { name: 'Chandi Devi Temple', type: 'Spiritual', description: 'Temple dedicated to Goddess Chandi on a hill' },
+        { name: 'Mansa Devi Temple', type: 'Spiritual', description: 'Temple dedicated to Goddess Mansa Devi' },
+        { name: 'Rajaji National Park', type: 'Natural', description: 'Wildlife sanctuary with elephants and tigers' },
+        { name: 'Bharat Mata Temple', type: 'Cultural', description: 'Unique temple with relief map of India' },
+        { name: 'Sapt Rishi Ashram', type: 'Spiritual', description: 'Ancient ashram associated with seven sages' }
       ],
       amritsar: [
-        { name: 'Jallianwala Bagh', type: 'Heritage', description: 'Memorial of the tragic 1919 massacre, symbol of freedom struggle' },
+        { name: 'Golden Temple', type: 'Spiritual', description: 'Holiest Sikh shrine with stunning golden architecture' },
+        { name: 'Jallianwala Bagh', type: 'Heritage', description: 'Historical site commemorating freedom struggle' },
         { name: 'Wagah Border', type: 'Cultural', description: 'Famous border ceremony between India and Pakistan' },
-        { name: 'Partition Museum', type: 'Heritage', description: 'Museum documenting the 1947 partition of India' },
-        { name: 'Gobindgarh Fort', type: 'Heritage', description: 'Historic Sikh fort with cultural shows and exhibitions' },
-        { name: 'Hall Bazaar', type: 'Cultural', description: 'Traditional market for Punjabi textiles, jewelry, and handicrafts' },
-        { name: 'Maharaja Ranjit Singh Museum', type: 'Heritage', description: 'Museum dedicated to the Lion of Punjab' }
+        { name: 'Durgiana Temple', type: 'Spiritual', description: 'Beautiful Hindu temple with golden dome' },
+        { name: 'Ram Bagh Gardens', type: 'Natural', description: 'Historic Mughal gardens with fountains' },
+        { name: 'Partition Museum', type: 'Heritage', description: 'Museum documenting the 1947 partition' }
+      ],
+      mysore: [
+        { name: 'Mysore Palace', type: 'Heritage', description: 'Magnificent royal palace with Indo-Saracenic architecture' },
+        { name: 'Chamundi Hills', type: 'Natural', description: 'Sacred hill with temple and panoramic city views' },
+        { name: 'Brindavan Gardens', type: 'Natural', description: 'Beautiful gardens with musical fountain show' },
+        { name: 'St. Philomena\'s Church', type: 'Cultural', description: 'Neo-Gothic church with stunning stained glass' },
+        { name: 'Jaganmohan Palace', type: 'Heritage', description: 'Art gallery and museum in royal palace' },
+        { name: 'Kukkarahalli Lake', type: 'Natural', description: 'Peaceful lake with walking paths and gardens' }
       ]
     };
 
-    const dest = destination.toLowerCase().trim();
-    let attractionList = locationAttractions[dest];
-    
-    // If no specific attractions found, create generic ones with destination name
-    if (!attractionList) {
-      attractionList = [
-        { name: `${destination} Heritage Walk`, type: 'Cultural', description: `Guided tour through historic areas of ${destination}` },
-        { name: `${destination} Local Market`, type: 'Cultural', description: `Traditional market showcasing local crafts and cuisine` },
-        { name: `${destination} Spiritual Center`, type: 'Spiritual', description: `Main spiritual and meditation center in ${destination}` },
-        { name: `${destination} Viewpoint`, type: 'Natural', description: `Scenic viewpoint offering panoramic views of ${destination}` },
-        { name: `${destination} Museum`, type: 'Heritage', description: `Museum showcasing history and culture of ${destination}` },
-        { name: `${destination} Gardens`, type: 'Natural', description: `Beautiful gardens for relaxation and nature walks` }
-      ];
+    const normalizedDestination = destination.toLowerCase().trim();
+    const attractionList = attractions[normalizedDestination];
+
+    if (attractionList) {
+      return attractionList.map((attraction, index) => ({
+        ...attraction,
+        rating: Math.round((Math.random() * 1.5 + 3.5) * 10) / 10,
+        imageUrl: `/api/placeholder/300/200?attraction=${normalizedDestination}_${index}`,
+        coordinates: this.getMockCoordinates(destination)
+      }));
     }
 
-    // Get coordinates for the destination to make locations more realistic
-    const coords = this.getPredefinedCoordinates(destination) || { lat: 25.3176, lng: 82.9739 };
+    // Default attractions for unknown destinations
+    const defaultAttractions = [
+      { name: `${destination} Heritage Site`, type: 'Heritage', description: `Historic landmark showcasing ${destination}'s rich cultural heritage` },
+      { name: `${destination} Nature Spot`, type: 'Natural', description: `Beautiful natural location in ${destination} perfect for relaxation` },
+      { name: `${destination} Cultural Center`, type: 'Cultural', description: `Cultural hub featuring local traditions and arts of ${destination}` },
+      { name: `${destination} Sacred Place`, type: 'Spiritual', description: `Spiritual site offering peace and reflection in ${destination}` },
+      { name: `${destination} Local Market`, type: 'Cultural', description: `Bustling market showcasing local crafts and cuisine of ${destination}` },
+      { name: `${destination} Scenic View`, type: 'Natural', description: `Panoramic viewpoint offering stunning vistas of ${destination}` }
+    ];
 
-    return attractionList.map((attraction, index) => ({
-      name: attraction.name,
-      type: attraction.type,
-      description: attraction.description,
+    return defaultAttractions.map((attraction, index) => ({
+      ...attraction,
       rating: Math.round((Math.random() * 1.5 + 3.5) * 10) / 10,
-      imageUrl: `/api/placeholder/300/200?attraction=${dest}-${index}`,
-      coordinates: { 
-        lat: coords.lat + (Math.random() - 0.5) * 0.02, 
-        lng: coords.lng + (Math.random() - 0.5) * 0.02 
-      }
+      imageUrl: `/api/placeholder/300/200?attraction=${normalizedDestination}_${index}`,
+      coordinates: this.getMockCoordinates(destination)
     }));
   }
 
@@ -529,11 +826,11 @@ export class TravelApiService {
   }
 
   // Validate travel preferences
-  private static validatePreferences(preferences: any): { isValid: boolean; sanitized: any; warnings: string[] } {
-    const sanitized: any = {};
+  private static validatePreferences(preferences: Record<string, unknown>): { isValid: boolean; sanitized: Record<string, unknown>; warnings: string[] } {
+    const sanitized: Record<string, unknown> = {};
     const warnings: string[] = [];
 
-    if (preferences.budget) {
+    if (preferences.budget && typeof preferences.budget === 'string') {
       const validBudgets = ['low', 'mid', 'high', 'luxury'];
       if (!validBudgets.includes(preferences.budget)) {
         warnings.push('Invalid budget type, using default');
@@ -542,7 +839,7 @@ export class TravelApiService {
       }
     }
 
-    if (preferences.duration) {
+    if (preferences.duration && typeof preferences.duration === 'string') {
       const duration = parseInt(preferences.duration);
       if (isNaN(duration) || duration < 1 || duration > 30) {
         warnings.push('Invalid duration, using default (3 days)');
@@ -552,7 +849,7 @@ export class TravelApiService {
       }
     }
 
-    if (preferences.travelers) {
+    if (preferences.travelers && typeof preferences.travelers === 'string') {
       const travelers = parseInt(preferences.travelers);
       if (isNaN(travelers) || travelers < 1 || travelers > 20) {
         warnings.push('Invalid number of travelers, using default (2)');
@@ -562,7 +859,7 @@ export class TravelApiService {
       }
     }
 
-    if (preferences.transport) {
+    if (preferences.transport && typeof preferences.transport === 'string') {
       const validTransport = ['train', 'flight', 'bus', 'car'];
       if (!validTransport.includes(preferences.transport)) {
         warnings.push('Invalid transport type, using default (train)');
@@ -577,10 +874,10 @@ export class TravelApiService {
 
   // Validate itinerary parameters
   private static validateItineraryParams(origin: string, destination: string, duration: number, budget: string):
-    { isValid: boolean; sanitized: any; errors: string[] } {
+    { isValid: boolean; sanitized: Record<string, unknown>; errors: string[] } {
 
     const errors: string[] = [];
-    const sanitized: any = {};
+    const sanitized: Record<string, unknown> = {};
 
     // Validate origin
     const originValidation = this.validateDestination(origin);
@@ -623,7 +920,7 @@ export class TravelApiService {
   // ===== GEMINI AI ENHANCED METHODS =====
 
   // Get detailed trip information with Gemini AI
-  static async getTripDetailsWithGemini(destination: string, preferences: any = {}): Promise<string> {
+  static async getTripDetailsWithGemini(destination: string, preferences: Record<string, unknown> = {}): Promise<string> {
     // Validate inputs first
     const destValidation = this.validateDestination(destination);
     if (!destValidation.isValid) {
@@ -922,7 +1219,7 @@ Provide accurate, respectful information that helps pilgrims have a meaningful s
 
     } catch (error) {
       console.error('Error with Hugging Face API:', error);
-      console.log('Falling back to Gemini AI');
+      
       return this.getTripDetailsWithGemini(destination, { focus: 'spiritual' });
     }
   }
@@ -941,7 +1238,12 @@ Provide accurate, respectful information that helps pilgrims have a meaningful s
       const apiKey = this.HUGGINGFACE_CONFIG.apiKey;
       if (!apiKey || apiKey === '') {
         console.warn('Hugging Face API key not configured, falling back to Gemini');
-        return this.getPersonalizedItinerary(validOrigin, validDest, validDuration, validBudget);
+        return this.getPersonalizedItinerary(
+          validOrigin as string,
+          validDest as string,
+          validDuration as number,
+          validBudget as string
+        );
       }
 
       const prompt = `Create a detailed ${validDuration}-day spiritual pilgrimage itinerary from ${validOrigin} to ${validDest} in India:
@@ -1019,7 +1321,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
 
     } catch (error) {
       console.error('Error with Hugging Face itinerary generation:', error);
-      console.log('Falling back to Gemini for itinerary');
+      
       return this.getPersonalizedItinerary(origin, destination, duration, budget);
     }
   }
@@ -1117,7 +1419,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
   static async getTrainFare(trainNumber: string, fromStation: string, toStation: string, quota: string = 'GN') {
     try {
       const apiKey = this.API_KEYS.indianRail;
-      if (!apiKey || !apiKey.apiKey || apiKey.apiKey === 'YOUR_INDIAN_RAIL_API_KEY') {
+      if (!apiKey || !apiKey.apiKey || apiKey.apiKey === '') {
         console.warn('Indian Rail API key not configured, using mock data');
         return this.getMockTrainFare(trainNumber, fromStation, toStation, quota);
       }
@@ -1179,7 +1481,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
       const apiKey = this.API_KEYS.indianRail.apiKey;
       const apiHost = this.API_KEYS.indianRail.host;
 
-      if (!apiKey || apiKey === 'YOUR_INDIAN_RAIL_API_KEY') {
+      if (!apiKey || !apiKey.apiKey || apiKey.apiKey === '') {
         console.warn('Indian Rail API key not configured, using mock data');
         return this.getMockTrainsBetweenStations(fromStation, toStation);
       }
@@ -1203,7 +1505,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
       const response = await fetch(`${url}?${params}`, {
         method: 'GET',
         headers: {
-          'X-Rapidapi-Key': apiKey,
+          'X-Rapidapi-Key': apiKey.apiKey,
           'X-Rapidapi-Host': apiHost,
           'X-Rapid-Api': 'rapid-api-database',
           'Content-Type': 'application/json'
@@ -1215,7 +1517,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
       }
 
       const data = await response.json();
-      console.log('Indian Rail API Response:', data); // Debug logging
+       // Debug logging
 
       if (data && (data.status === 'success' || data.ResponseCode === '200')) {
         // Handle different API response formats
@@ -1247,14 +1549,14 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
       return this.getMockTrainsBetweenStations(fromStation, toStation);
     } catch (error) {
       console.error('Error fetching train data:', error);
-      console.log('Falling back to mock train data'); // Debug logging
+       // Debug logging
       return this.getMockTrainsBetweenStations(fromStation, toStation);
     }
   }
 
   // Mock fallback for trains between stations
   private static getMockTrainsBetweenStations(fromStation: string, toStation: string) {
-    console.log(`Using mock train data from ${fromStation} to ${toStation}`); // Debug logging
+     // Debug logging
     return [
       {
         number: '12565',
@@ -1303,7 +1605,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
       const apiKey = this.API_KEYS.amadeus.apiKey;
       const apiSecret = this.API_KEYS.amadeus.apiSecret;
 
-      if (!apiKey || !apiSecret || apiKey === 'YOUR_AMADEUS_API_KEY') {
+      if (!apiKey || !apiSecret || apiKey === '') {
         console.warn('Amadeus API credentials not configured');
         return null;
       }
@@ -1338,7 +1640,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
   }
 
   // Search flights using Amadeus API
-  static async searchFlights(origin: string, destination: string, departureDate: string, returnDate?: string, passengers: number = 1): Promise<any[]> {
+  static async searchFlights(origin: string, destination: string, departureDate: string, returnDate?: string, passengers: number = 1): Promise<AmadeusFlight[]> {
     try {
       const token = await this.getAmadeusToken();
       if (!token) {
@@ -1404,7 +1706,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
   }
 
   // Mock flight data fallback
-  private static getMockFlights(origin: string, destination: string, departureDate: string): any[] {
+  private static getMockFlights(origin: string, destination: string, departureDate: string): AmadeusFlight[] {
     const airlines = ['IndiGo', 'Air India', 'SpiceJet', 'Vistara', 'GoAir'];
     const flights = [];
 
@@ -1483,7 +1785,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
       const apiKey = this.API_KEYS.booking.apiKey;
       const apiHost = this.API_KEYS.booking.host;
 
-      if (!apiKey || apiKey === 'YOUR_BOOKING_API_KEY') {
+      if (!apiKey || apiKey === '') {
         console.warn('Booking.com API key not configured, using mock data');
         return this.getHotels(destination, 'mid'); // Use existing mock method
       }
@@ -1554,7 +1856,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
   static async getDetailedPlaceInfo(xid: string): Promise<any> {
     try {
       const apiKey = this.API_KEYS.opentripmap;
-      if (!apiKey || apiKey === 'YOUR_OPENTRIPMAP_KEY') {
+      if (!apiKey || apiKey === '') {
         console.warn('OpenTripMap API key not configured');
         return null;
       }
@@ -1593,7 +1895,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
   static async getEnhancedPlacesByRadius(lat: number, lng: number, radius: number = 10000, kinds?: string): Promise<any[]> {
     try {
       const apiKey = this.API_KEYS.opentripmap;
-      if (!apiKey || apiKey === 'YOUR_OPENTRIPMAP_KEY') {
+      if (!apiKey || apiKey === '') {
         console.warn('OpenTripMap API key not configured');
         return [];
       }
@@ -1631,13 +1933,39 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
 
   // ===== UPDATED METHODS WITH REAL API INTEGRATION =====
 
-  // Enhanced getAttractions with more detailed OpenTripMap data
+  // Enhanced getAttractions with improved API handling
   static async getAttractions(destination: string): Promise<AttractionData[]> {
+    console.log(`🎭 Fetching attractions for: ${destination}`);
+
     try {
       const coords = await this.getCoordinates(destination);
-      if (!coords) return this.getMockAttractions(destination);
+      if (!coords) {
+        console.warn('No coordinates available, using mock attractions');
+        return this.getMockAttractions(destination);
+      }
 
-      // Try enhanced OpenTripMap first
+      // Check if OpenTripMap API key is valid
+      if (!this.isValidApiKey(this.API_KEYS.opentripmap)) {
+        console.warn('OpenTripMap API key not configured or invalid, using mock attractions');
+        return this.getMockAttractions(destination);
+      }
+
+      // Test API connectivity if not recently checked
+      const lastChecked = this.apiStatus.opentripmap.lastChecked;
+      if (Date.now() - lastChecked > 300000) { // Check every 5 minutes
+        const testUrl = `${this.BASE_URLS.places}/radius?radius=1000&lon=0&lat=0&kinds=tourist_facilities&format=json&apikey=${this.API_KEYS.opentripmap}`;
+        await this.testApiConnectivity('opentripmap', testUrl);
+      }
+
+      // Skip API call if we know it's not working
+      if (!this.apiStatus.opentripmap.working && Date.now() - lastChecked < 3600000) { // Within last hour
+        console.warn('OpenTripMap API previously failed, using mock attractions');
+        return this.getMockAttractions(destination);
+      }
+
+      console.log(`🔍 Searching for attractions near ${destination} (${coords.lat}, ${coords.lng})`);
+
+      // Try enhanced OpenTripMap with timeout
       const enhancedPlaces = await this.getEnhancedPlacesByRadius(
         coords.lat,
         coords.lng,
@@ -1646,20 +1974,25 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
       );
 
       if (enhancedPlaces.length > 0) {
+        console.log(`✅ Found ${enhancedPlaces.length} enhanced places from OpenTripMap`);
+
         const attractions: AttractionData[] = enhancedPlaces.slice(0, 6).map((place: any) => ({
           name: place.name || 'Attraction',
           type: place.kinds?.split(',')[0] || 'Sightseeing',
           description: place.details?.description || place.wikipedia_extracts?.text || 'Popular tourist attraction worth visiting',
           rating: place.rate || Math.round((Math.random() * 2 + 3) * 10) / 10,
-          imageUrl: place.details?.image || place.preview?.source || '/api/placeholder/300/200',
+          imageUrl: place.details?.image || place.preview?.source || `/api/placeholder/300/200?attraction=${Date.now()}`,
           coordinates: { lat: place.point.lat, lng: place.point.lon }
         }));
 
+        console.log(`✅ Processed ${attractions.length} attractions from enhanced API`);
         return attractions.length > 0 ? attractions : this.getMockAttractions(destination);
       }
 
       // Fallback to original method
+      console.log('Enhanced API returned no results, trying original method');
       return await this.getOriginalAttractions(destination);
+
     } catch (error) {
       console.error('Error fetching attractions:', error);
       return this.getMockAttractions(destination);
@@ -1700,10 +2033,22 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
   static async getHotels(destination: string, budget: string): Promise<HotelData[]> {
     try {
       // Load custom hotels for this destination
-      this.loadCustomData();
-      const customHotels = this.customData.hotels.filter(
-        hotel => hotel.location.toLowerCase().includes(destination.toLowerCase())
-      );
+      let customHotels: HotelData[] = [];
+
+      if (this.isAuthenticated()) {
+        const userId = this.getCurrentUserId()!;
+        const result = await DatabaseService.getCustomHotels(userId);
+        if (result.success) {
+          customHotels = result.data.filter(
+            hotel => hotel.location.toLowerCase().includes(destination.toLowerCase())
+          );
+        }
+      } else {
+        this.loadCustomData();
+        customHotels = this.customData.hotels.filter(
+          hotel => hotel.location.toLowerCase().includes(destination.toLowerCase())
+        );
+      }
 
       // Try Booking.com API first
       const coords = await this.getCoordinates(destination);
@@ -1730,15 +2075,28 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
     } catch (error) {
       console.error('Error fetching hotels:', error);
       // Return custom hotels + mock hotels on error
-      this.loadCustomData();
-      const customHotels = this.customData.hotels.filter(
-        hotel => hotel.location.toLowerCase().includes(destination.toLowerCase())
-      );
+      let customHotels: HotelData[] = [];
+
+      if (this.isAuthenticated()) {
+        const userId = this.getCurrentUserId()!;
+        const result = await DatabaseService.getCustomHotels(userId);
+        if (result.success) {
+          customHotels = result.data.filter(
+            hotel => hotel.location.toLowerCase().includes(destination.toLowerCase())
+          );
+        }
+      } else {
+        this.loadCustomData();
+        customHotels = this.customData.hotels.filter(
+          hotel => hotel.location.toLowerCase().includes(destination.toLowerCase())
+        );
+      }
+
       return [...customHotels, ...this.getEnhancedMockHotels(destination, budget)];
     }
   }
 
-  // Enhanced mock hotels with more realistic data
+  // Enhanced mock hotels with location-specific data
   private static getEnhancedMockHotels(destination: string, budget: string): HotelData[] {
     const budgetMultiplier = {
       low: 1,
@@ -1750,61 +2108,102 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
     const basePrice = 2000;
     const multiplier = budgetMultiplier[budget as keyof typeof budgetMultiplier] || 1;
 
-    // Location-specific hotel data
-    const locationSpecificHotels: { [key: string]: any[] } = {
+    const hotels: Record<string, Array<{ name: string; location: string; amenities: string[]; description: string }>> = {
       varanasi: [
-        { name: 'Ganga View Heritage Hotel', area: 'Assi Ghat', amenities: ['Ganga View', 'Temple Shuttle', 'Ayurvedic Spa'] },
-        { name: 'Kashi Spiritual Retreat', area: 'Dashashwamedh Ghat', amenities: ['Prayer Room', 'Yoga Classes', 'Vegetarian Restaurant'] },
-        { name: 'Benares Palace Hotel', area: 'Cantonment', amenities: ['Luxury Spa', 'Multi-cuisine Restaurant', 'Cultural Programs'] },
-        { name: 'Pilgrim Rest Inn', area: 'Godowlia', amenities: ['Budget Friendly', 'Free WiFi', 'Temple Tours'] }
+        { name: 'Ganges View Hotel', location: 'Assi Ghat, Varanasi', amenities: ['Ganges View', 'Free WiFi', 'AC', 'Restaurant', 'Temple Shuttle'], description: 'Riverside hotel with stunning Ganges views' },
+        { name: 'Kashi Spiritual Retreat', location: 'Near Kashi Vishwanath Temple', amenities: ['Free WiFi', 'AC', 'Meditation Garden', 'Yoga Classes', 'Vegetarian Restaurant'], description: 'Peaceful retreat near the main temple' },
+        { name: 'Pilgrim Comfort Inn Varanasi', location: 'City Center, Varanasi', amenities: ['Free WiFi', 'AC', 'Room Service', 'Travel Desk', 'Laundry'], description: 'Comfortable stay in the heart of the city' },
+        { name: 'Sarnath Heritage Hotel', location: 'Near Sarnath, Varanasi', amenities: ['Free WiFi', 'AC', 'Spa', 'Restaurant', 'Cultural Tours'], description: 'Heritage hotel near Buddhist sites' }
       ],
       tirupati: [
-        { name: 'Tirumala Hills Resort', area: 'Near Temple', amenities: ['Darshan Booking', 'Free Temple Transport', 'Vegetarian Only'] },
-        { name: 'Balaji Comfort Lodge', area: 'Railway Station Area', amenities: ['Early Check-in', 'Prasadam Service', 'Travel Desk'] },
-        { name: 'Divine Stay Hotel', area: 'Bus Stand', amenities: ['Budget Rooms', 'Temple Packages', 'Free Breakfast'] },
-        { name: 'Venkateswara Grand', area: 'City Center', amenities: ['Luxury Amenities', 'Conference Hall', 'Multi-cuisine'] }
+        { name: 'Tirumala Temple View', location: 'Near Tirupati Temple', amenities: ['Temple View', 'Free WiFi', 'AC', 'Restaurant', 'Temple Shuttle'], description: 'Hotel with direct temple views' },
+        { name: 'Balaji Spiritual Center', location: 'Tirupati Hills', amenities: ['Free WiFi', 'AC', 'Meditation Garden', 'Yoga Classes', 'Vegetarian Restaurant'], description: 'Spiritual retreat in the hills' },
+        { name: 'Tirupati Pilgrim Lodge', location: 'City Center, Tirupati', amenities: ['Free WiFi', 'AC', 'Room Service', 'Travel Desk', 'Laundry'], description: 'Convenient lodging for pilgrims' },
+        { name: 'Padmavati Boutique Hotel', location: 'Heritage Area, Tirupati', amenities: ['Free WiFi', 'AC', 'Spa', 'Restaurant', 'Cultural Tours'], description: 'Luxury boutique in historic area' }
       ],
       rishikesh: [
-        { name: 'Ganga Kinare Hotel', area: 'Tapovan', amenities: ['River View', 'Yoga Classes', 'Meditation Garden'] },
-        { name: 'Himalayan Yoga Ashram', area: 'Laxman Jhula', amenities: ['Spiritual Programs', 'Organic Food', 'Silence Zones'] },
-        { name: 'Adventure & Spirituality Resort', area: 'Ram Jhula', amenities: ['River Rafting', 'Yoga Retreat', 'Ayurveda'] },
-        { name: 'Triveni Ghat Lodge', area: 'Triveni Ghat', amenities: ['Ganga Aarti View', 'Temple Proximity', 'Budget Friendly'] }
+        { name: 'Ganges Riverside Resort', location: 'Triveni Ghat, Rishikesh', amenities: ['River View', 'Free WiFi', 'AC', 'Restaurant', 'Yoga Classes'], description: 'Riverside resort with yoga facilities' },
+        { name: 'Himalayan Spiritual Retreat', location: 'Foothills, Rishikesh', amenities: ['Free WiFi', 'AC', 'Meditation Garden', 'Yoga Classes', 'Vegetarian Restaurant'], description: 'Mountain retreat for spiritual seekers' },
+        { name: 'Beatles Ashram Lodge', location: 'Near Beatles Ashram, Rishikesh', amenities: ['Free WiFi', 'AC', 'Room Service', 'Travel Desk', 'Laundry'], description: 'Historic lodge near cultural sites' },
+        { name: 'Ramana\'s Garden Resort', location: 'Peaceful Valley, Rishikesh', amenities: ['Free WiFi', 'AC', 'Spa', 'Restaurant', 'Cultural Tours'], description: 'Garden resort with wellness facilities' }
+      ],
+      haridwar: [
+        { name: 'Har Ki Pauri Hotel', location: 'Near Har Ki Pauri Ghat', amenities: ['Ghat View', 'Free WiFi', 'AC', 'Restaurant', 'Temple Shuttle'], description: 'Hotel overlooking the sacred ghat' },
+        { name: 'Ganges Spiritual Center', location: 'Riverside, Haridwar', amenities: ['Free WiFi', 'AC', 'Meditation Garden', 'Yoga Classes', 'Vegetarian Restaurant'], description: 'Spiritual center by the Ganges' },
+        { name: 'Haridwar Pilgrim Inn', location: 'City Center, Haridwar', amenities: ['Free WiFi', 'AC', 'Room Service', 'Travel Desk', 'Laundry'], description: 'Convenient inn for pilgrims' },
+        { name: 'Sapt Rishi Heritage Hotel', location: 'Ancient Quarter, Haridwar', amenities: ['Free WiFi', 'AC', 'Spa', 'Restaurant', 'Cultural Tours'], description: 'Heritage hotel in ancient area' }
       ],
       amritsar: [
-        { name: 'Golden Temple Heritage Hotel', area: 'Heritage Street', amenities: ['Temple View', 'Sikh History Tours', 'Langar Access'] },
-        { name: 'Guru Nanak Palace', area: 'Hall Bazaar', amenities: ['Luxury Rooms', 'Punjabi Cuisine', 'Cultural Shows'] },
-        { name: 'Harmander Comfort Inn', area: 'Railway Station', amenities: ['Budget Stay', 'Early Check-in', 'Temple Shuttle'] },
-        { name: 'Sikh Heritage Resort', area: 'GT Road', amenities: ['Historical Tours', 'Traditional Food', 'Garden Restaurant'] }
+        { name: 'Golden Temple View Hotel', location: 'Near Golden Temple', amenities: ['Temple View', 'Free WiFi', 'AC', 'Restaurant', 'Temple Shuttle'], description: 'Hotel with Golden Temple views' },
+        { name: 'Wagah Border Resort', location: 'Near Wagah Border', amenities: ['Free WiFi', 'AC', 'Meditation Garden', 'Yoga Classes', 'Vegetarian Restaurant'], description: 'Resort near the historic border' },
+        { name: 'Amritsar Heritage Inn', location: 'City Center, Amritsar', amenities: ['Free WiFi', 'AC', 'Room Service', 'Travel Desk', 'Laundry'], description: 'Heritage inn in city center' },
+        { name: 'Punjab Cultural Hotel', location: 'Cultural District, Amritsar', amenities: ['Free WiFi', 'AC', 'Spa', 'Restaurant', 'Cultural Tours'], description: 'Hotel showcasing Punjabi culture' }
+      ],
+      mysore: [
+        { name: 'Palace View Hotel', location: 'Near Mysore Palace', amenities: ['Palace View', 'Free WiFi', 'AC', 'Restaurant', 'Temple Shuttle'], description: 'Hotel with palace views' },
+        { name: 'Chamundi Hill Resort', location: 'Foothills, Mysore', amenities: ['Free WiFi', 'AC', 'Meditation Garden', 'Yoga Classes', 'Vegetarian Restaurant'], description: 'Hill resort with spiritual ambiance' },
+        { name: 'Mysore Royal Inn', location: 'City Center, Mysore', amenities: ['Free WiFi', 'AC', 'Room Service', 'Travel Desk', 'Laundry'], description: 'Royal inn in city center' },
+        { name: 'Karnataka Heritage Hotel', location: 'Heritage Area, Mysore', amenities: ['Free WiFi', 'AC', 'Spa', 'Restaurant', 'Cultural Tours'], description: 'Heritage hotel in historic area' }
       ]
     };
 
-    const dest = destination.toLowerCase().trim();
-    let hotelData = locationSpecificHotels[dest];
-    
-    // If no specific data found, use generic templates but with destination-specific naming
-    if (!hotelData) {
-      hotelData = [
-        { name: `${destination} Temple View Hotel`, area: 'Near Main Temple', amenities: ['Temple Shuttle', 'Prayer Room', 'Vegetarian Food'] },
-        { name: `${destination} Spiritual Retreat`, area: 'Peaceful Area', amenities: ['Meditation Garden', 'Yoga Classes', 'Organic Food'] },
-        { name: `${destination} Pilgrim Inn`, area: 'City Center', amenities: ['Budget Friendly', 'Travel Desk', 'Temple Tours'] },
-        { name: `${destination} Heritage Stay`, area: 'Heritage Quarter', amenities: ['Cultural Tours', 'Local Cuisine', 'Art Gallery'] }
-      ];
+    const normalizedDestination = destination.toLowerCase().trim();
+    const hotelList = hotels[normalizedDestination];
+
+    if (hotelList) {
+      return hotelList.map((hotel, index) => ({
+        name: hotel.name,
+        rating: Math.round((Math.random() * 0.8 + 3.7) * 10) / 10,
+        price: Math.round(basePrice * multiplier * (0.8 + Math.random() * 0.4)),
+        location: hotel.location,
+        amenities: hotel.amenities,
+        imageUrl: `/api/placeholder/300/200?hotel=${normalizedDestination}_${index}`,
+        cancellation: Math.random() > 0.5 ? 'Free cancellation until 24 hours before check-in' : 'Non-refundable'
+      }));
     }
 
-    return hotelData.map((hotel, index) => ({
+    // Default hotels for unknown destinations
+    const defaultHotels = [
+      {
+        name: `${destination} Temple View Hotel`,
+        location: `Near Main Temple, ${destination}`,
+        amenities: ['Free WiFi', 'AC', 'Restaurant', 'Temple Shuttle', 'Prayer Room'],
+        description: `Hotel near main temple in ${destination}`
+      },
+      {
+        name: `${destination} Spiritual Retreat`,
+        location: `Peaceful Area, ${destination}`,
+        amenities: ['Free WiFi', 'AC', 'Meditation Garden', 'Yoga Classes', 'Vegetarian Restaurant'],
+        description: `Spiritual retreat in ${destination}`
+      },
+      {
+        name: `${destination} Pilgrim Comfort Inn`,
+        location: `City Center, ${destination}`,
+        amenities: ['Free WiFi', 'AC', 'Room Service', 'Travel Desk', 'Laundry'],
+        description: `Comfortable inn for pilgrims in ${destination}`
+      },
+      {
+        name: `${destination} Heritage Boutique`,
+        location: `Heritage Area, ${destination}`,
+        amenities: ['Free WiFi', 'AC', 'Spa', 'Restaurant', 'Cultural Tours'],
+        description: `Boutique hotel in heritage area of ${destination}`
+      }
+    ];
+
+    return defaultHotels.map((hotel, index) => ({
       name: hotel.name,
       rating: Math.round((Math.random() * 0.8 + 3.7) * 10) / 10,
       price: Math.round(basePrice * multiplier * (0.8 + Math.random() * 0.4)),
-      location: `${hotel.area}, ${destination}`,
-      amenities: ['Free WiFi', 'AC', ...hotel.amenities],
-      imageUrl: `/api/placeholder/300/200?hotel=${dest}-${index}`,
+      location: hotel.location,
+      amenities: hotel.amenities,
+      imageUrl: `/api/placeholder/300/200?hotel=${normalizedDestination}_${index}`,
       cancellation: Math.random() > 0.5 ? 'Free cancellation until 24 hours before check-in' : 'Non-refundable'
     }));
   }
 
   // Enhanced getTransportOptions with real flight data and custom data
   static async getTransportOptions(from: string, to: string, transport: string): Promise<TransportData[]> {
-    console.log(`Getting transport options: ${transport} from ${from} to ${to}`); // Debug logging
+     // Debug logging
 
     if (transport === 'train') {
       try {
@@ -1817,7 +2216,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
         );
 
         const trains = await this.getTrainsBetweenStations(from, to);
-        console.log('Train data received:', trains); // Debug logging
+         // Debug logging
 
         // Transform API response to TransportData format
         const transformedTrains: TransportData[] = trains.map((train: any): TransportData => ({
@@ -1838,7 +2237,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
           index === self.findIndex(t => t.name === train.name)
         );
 
-        console.log('Final transport data:', uniqueTrains); // Debug logging
+         // Debug logging
         return uniqueTrains;
       } catch (error) {
         console.error('Error fetching train data:', error);
@@ -1918,8 +2317,224 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
       );
     }
 
-    return new Promise((resolve) => {
-      setTimeout(() => resolve(mockTransport), 800);
+    return mockTransport;
+  }
+
+  // ===== API DIAGNOSTICS AND TESTING =====
+
+  // Test all APIs and return status report
+  static async testAllApis(): Promise<Record<string, { working: boolean; error?: string; lastChecked: number }>> {
+    console.log('🔧 Testing all API connections...');
+
+    const results: Record<string, { working: boolean; error?: string; lastChecked: number }> = {};
+
+    // Test OpenCage (Geocoding)
+    try {
+      if (this.isValidApiKey(this.API_KEYS.opencage)) {
+        const testUrl = `${this.BASE_URLS.geocoding}?q=test&key=${this.API_KEYS.opencage}&limit=1`;
+        const working = await this.testApiConnectivity('opencage', testUrl);
+        results.opencage = {
+          working,
+          lastChecked: this.apiStatus.opencage.lastChecked
+        };
+      } else {
+        results.opencage = {
+          working: false,
+          error: 'Invalid or missing API key',
+          lastChecked: Date.now()
+        };
+      }
+    } catch (error: any) {
+      results.opencage = {
+        working: false,
+        error: error.message,
+        lastChecked: Date.now()
+      };
+    }
+
+    // Test OpenTripMap
+    try {
+      if (this.isValidApiKey(this.API_KEYS.opentripmap)) {
+        const testUrl = `${this.BASE_URLS.places}/radius?radius=1000&lon=0&lat=0&kinds=religion&format=json&apikey=${this.API_KEYS.opentripmap}`;
+        const working = await this.testApiConnectivity('opentripmap', testUrl);
+        results.opentripmap = {
+          working,
+          lastChecked: this.apiStatus.opentripmap.lastChecked
+        };
+      } else {
+        results.opentripmap = {
+          working: false,
+          error: 'Invalid or missing API key',
+          lastChecked: Date.now()
+        };
+      }
+    } catch (error: any) {
+      results.opentripmap = {
+        working: false,
+        error: error.message,
+        lastChecked: Date.now()
+      };
+    }
+
+    // Test OpenWeather
+    try {
+      if (this.isValidApiKey(this.API_KEYS.openweather)) {
+        const testUrl = `${this.BASE_URLS.weather}?q=test&appid=${this.API_KEYS.openweather}`;
+        const working = await this.testApiConnectivity('openweather', testUrl);
+        results.openweather = {
+          working,
+          lastChecked: this.apiStatus.openweather.lastChecked
+        };
+      } else {
+        results.openweather = {
+          working: false,
+          error: 'Invalid or missing API key',
+          lastChecked: Date.now()
+        };
+      }
+    } catch (error: any) {
+      results.openweather = {
+        working: false,
+        error: error.message,
+        lastChecked: Date.now()
+      };
+    }
+
+    // Test Gemini AI
+    try {
+      if (this.isValidApiKey(this.API_KEYS.gemini)) {
+        results.gemini = {
+          working: true, // Assume working if key is valid
+          lastChecked: Date.now()
+        };
+      } else {
+        results.gemini = {
+          working: false,
+          error: 'Invalid or missing API key',
+          lastChecked: Date.now()
+        };
+      }
+    } catch (error: any) {
+      results.gemini = {
+        working: false,
+        error: error.message,
+        lastChecked: Date.now()
+      };
+    }
+
+    // Test Indian Rail
+    try {
+      if (this.isValidApiKey(this.API_KEYS.indianRail.apiKey)) {
+        const testUrl = `https://${this.API_KEYS.indianRail.host}/api/trains/v1/train/status`;
+        const headers = {
+          'X-Rapidapi-Key': this.API_KEYS.indianRail.apiKey,
+          'X-Rapidapi-Host': this.API_KEYS.indianRail.host
+        };
+        const working = await this.testApiConnectivity('indianRail', testUrl, headers);
+        results.indianRail = {
+          working,
+          lastChecked: this.apiStatus.indianRail.lastChecked
+        };
+      } else {
+        results.indianRail = {
+          working: false,
+          error: 'Invalid or missing API key',
+          lastChecked: Date.now()
+        };
+      }
+    } catch (error: any) {
+      results.indianRail = {
+        working: false,
+        error: error.message,
+        lastChecked: Date.now()
+      };
+    }
+
+    // Test Amadeus
+    try {
+      if (this.isValidApiKey(this.API_KEYS.amadeus.apiKey)) {
+        results.amadeus = {
+          working: true, // Assume working if key is valid (will be tested on actual use)
+          lastChecked: Date.now()
+        };
+      } else {
+        results.amadeus = {
+          working: false,
+          error: 'Invalid or missing API key',
+          lastChecked: Date.now()
+        };
+      }
+    } catch (error: any) {
+      results.amadeus = {
+        working: false,
+        error: error.message,
+        lastChecked: Date.now()
+      };
+    }
+
+    // Test Booking.com
+    try {
+      if (this.isValidApiKey(this.API_KEYS.booking.apiKey)) {
+        const testUrl = `https://${this.API_KEYS.booking.host}/api/v1/hotels/searchDestination`;
+        const headers = {
+          'X-Rapidapi-Key': this.API_KEYS.booking.apiKey,
+          'X-Rapidapi-Host': this.API_KEYS.booking.host
+        };
+        const working = await this.testApiConnectivity('booking', testUrl, headers);
+        results.booking = {
+          working,
+          lastChecked: this.apiStatus.booking.lastChecked
+        };
+      } else {
+        results.booking = {
+          working: false,
+          error: 'Invalid or missing API key',
+          lastChecked: Date.now()
+        };
+      }
+    } catch (error: any) {
+      results.booking = {
+        working: false,
+        error: error.message,
+        lastChecked: Date.now()
+      };
+    }
+
+    console.log('📊 API Test Results:', results);
+    return results;
+  }
+
+  // Get API status summary
+  static getApiStatusSummary(): { total: number; working: number; failed: number; details: Record<string, boolean> } {
+    const details: Record<string, boolean> = {};
+    let working = 0;
+    let failed = 0;
+
+    Object.entries(this.apiStatus).forEach(([api, status]) => {
+      details[api] = status.working;
+      if (status.working) {
+        working++;
+      } else {
+        failed++;
+      }
     });
+
+    return {
+      total: Object.keys(this.apiStatus).length,
+      working,
+      failed,
+      details
+    };
+  }
+
+  // Reset API status cache (useful for debugging)
+  static resetApiStatusCache(): void {
+    Object.keys(this.apiStatus).forEach(api => {
+      this.apiStatus[api as keyof typeof this.apiStatus] = {
+        working: false,
+        lastChecked: 0
+      };
+    });
+    console.log('🔄 API status cache reset');
   }
 }

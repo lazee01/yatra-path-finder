@@ -1,0 +1,50 @@
+[
+    {
+        "merged": "io.ionic.starter.app-debug-27:/mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "io.ionic.starter.app-main-29:/mipmap-xhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "io.ionic.starter.app-debug-27:/mipmap-xxhdpi_ic_launcher_round.png.flat",
+        "source": "io.ionic.starter.app-main-29:/mipmap-xxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "io.ionic.starter.app-debug-27:/mipmap-xxxhdpi_ic_launcher_round.png.flat",
+        "source": "io.ionic.starter.app-main-29:/mipmap-xxxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "io.ionic.starter.app-debug-27:/mipmap-xhdpi_ic_launcher_round.png.flat",
+        "source": "io.ionic.starter.app-main-29:/mipmap-xhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "io.ionic.starter.app-debug-27:/xml_file_paths.xml.flat",
+        "source": "io.ionic.starter.app-main-29:/xml/file_paths.xml"
+    },
+    {
+        "merged": "io.ionic.starter.app-debug-27:/mipmap-hdpi_ic_launcher.png.flat",
+        "source": "io.ionic.starter.app-main-29:/mipmap-hdpi/ic_launcher.png"
+    },
+    {
+        "merged": "io.ionic.starter.app-debug-27:/mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "io.ionic.starter.app-main-29:/mipmap-xxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "io.ionic.starter.app-debug-27:/mipmap-mdpi_ic_launcher.png.flat",
+        "source": "io.ionic.starter.app-main-29:/mipmap-mdpi/ic_launcher.png"
+    },
+    {
+        "merged": "io.ionic.starter.app-debug-27:/mipmap-mdpi_ic_launcher_round.png.flat",
+        "source": "io.ionic.starter.app-main-29:/mipmap-mdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "io.ionic.starter.app-debug-27:/mipmap-hdpi_ic_launcher_round.png.flat",
+        "source": "io.ionic.starter.app-main-29:/mipmap-hdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "io.ionic.starter.app-debug-27:/mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "io.ionic.starter.app-main-29:/mipmap-xxxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "io.ionic.starter.app-debug-27:/xml_config.xml.flat",
+        "source": "io.ionic.starter.app-main-29:/xml/config.xml"
+    }
+]

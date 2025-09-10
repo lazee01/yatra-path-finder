@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+// Initialize Firebase
+import "./lib/firebase";
 
 const queryClient = new QueryClient();
 
