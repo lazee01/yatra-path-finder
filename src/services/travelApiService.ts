@@ -171,21 +171,21 @@ export class TravelApiService {
 
   // API keys
   private static API_KEYS = {
-    opentripmap: 'YOUR_OPENTRIPMAP_KEY', // Free at developer.opentripmap.org
-    opencage: 'YOUR_OPENCAGE_KEY', // Free at opencagedata.com
-    openweather: 'YOUR_OPENWEATHER_KEY', // Free at openweathermap.org
-    gemini: import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyBTun7wQQLD0Dnq7V8mKPg1BcFkd3n4pbs',
+    opentripmap: import.meta.env.VITE_OPENTRIPMAP_API_KEY || 'YOUR_OPENTRIPMAP_KEY',
+    opencage: import.meta.env.VITE_OPENCAGE_API_KEY || 'YOUR_OPENCAGE_KEY', 
+    openweather: import.meta.env.VITE_OPENWEATHER_API_KEY || 'YOUR_OPENWEATHER_KEY',
+    gemini: 'AIzaSyBTun7wQQLD0Dnq7V8mKPg1BcFkd3n4pbs',
     indianRail: {
-      apiKey: import.meta.env.VITE_INDIAN_RAIL_API_KEY || 'YOUR_INDIAN_RAIL_API_KEY',
-      host: import.meta.env.VITE_INDIAN_RAIL_API_HOST || 'indian-railway-irctc.p.rapidapi.com'
+      apiKey: '8762cddac5mshc01ca9fafddeb74p1fed3djsnd12f0ba62d78',
+      host: 'indian-railway-irctc.p.rapidapi.com'
     },
     amadeus: {
-      apiKey: import.meta.env.VITE_AMADEUS_API_KEY || 'YOUR_AMADEUS_API_KEY',
-      apiSecret: import.meta.env.VITE_AMADEUS_API_SECRET || 'YOUR_AMADEUS_API_SECRET'
+      apiKey: 'ZJYMuk03HtvOZcyd99nABmF0lCEosGHA',
+      apiSecret: 'xLfl6iYI5S8CtYCz'
     },
     booking: {
-      apiKey: import.meta.env.VITE_BOOKING_API_KEY || 'YOUR_BOOKING_API_KEY',
-      host: import.meta.env.VITE_BOOKING_API_HOST || 'booking-com15.p.rapidapi.com'
+      apiKey: '8762cddac5mshc01ca9fafddeb74p1fed3djsnd12f0ba62d78',
+      host: 'booking-com15.p.rapidapi.com'
     },
   };
 
@@ -1026,7 +1026,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
       const apiKey = this.API_KEYS.indianRail.apiKey;
       const apiHost = this.API_KEYS.indianRail.host;
 
-      if (!apiKey || !apiKey.apiKey || apiKey.apiKey === 'YOUR_INDIAN_RAIL_API_KEY') {
+      if (!apiKey || apiKey === 'YOUR_INDIAN_RAIL_API_KEY') {
         console.warn('Indian Rail API key not configured, using mock data');
         return this.getMockTrainsBetweenStations(fromStation, toStation);
       }
@@ -1050,7 +1050,7 @@ Ensure the itinerary focuses on meaningful spiritual experiences and respects lo
       const response = await fetch(`${url}?${params}`, {
         method: 'GET',
         headers: {
-          'X-Rapidapi-Key': apiKey.apiKey,
+          'X-Rapidapi-Key': apiKey,
           'X-Rapidapi-Host': apiHost,
           'X-Rapid-Api': 'rapid-api-database',
           'Content-Type': 'application/json'
