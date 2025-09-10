@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { TravelApiService, HotelData, TempleData, TransportData, AttractionData } from '@/services/travelApiService';
 import ApiTester from './ApiTester';
+import DeployDebug from './DeployDebug';
 
 interface TripResultsProps {
   formData: {
@@ -256,7 +257,7 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8">
+          <TabsList className="grid w-full grid-cols-9">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="transport">Transport</TabsTrigger>
             <TabsTrigger value="hotels">Hotels</TabsTrigger>
@@ -265,6 +266,7 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
             <TabsTrigger value="ai-insights">🤖 AI Insights</TabsTrigger>
             <TabsTrigger value="custom">🎯 Custom Data</TabsTrigger>
             <TabsTrigger value="debug">🔧 Debug</TabsTrigger>
+            <TabsTrigger value="deploy-debug">🚀 Deploy Debug</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -1028,6 +1030,11 @@ export function TripResults({ formData, onBack }: TripResultsProps) {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Deploy Debug Tab */}
+          <TabsContent value="deploy-debug" className="space-y-6">
+            <DeployDebug />
           </TabsContent>
         </Tabs>
 
